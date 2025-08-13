@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compute Manager</title>
+    <link rel="stylesheet" href="common_style.css">
+    <link rel="stylesheet" href="compute.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Compute Manager</h1>
+            <div class="user-info">
+                <span id="userName">Loading user...</span>
+                <span id="regionInfo" class="region-info"></span>
+            </div>
+        </header>
+
+        <div class="content">
+            <div class="main">
+                <h2>Running Instances</h2>
+                <div class="refresh-bar">
+                    <button id="refreshInstances">Refresh</button>
+                </div>
+                <table id="instancesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Public IP</th>
+                            <th>Key Pair</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="instancesList"></tbody>
+                </table>
+
+                <h2>Launch Templates</h2>
+                <table id="templatesTable">
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Name</th>
+                            <th>ID</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody id="templatesList"></tbody>
+                </table>
+                <div class="launch-controls">
+                    <button id="launchInstanceBtn" disabled>Launch Instance</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connection Modal -->
+    <div id="connectModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Connect to Instance</h2>
+            <form id="connectForm">
+                <div class="form-group">
+                    <label for="sshUser">SSH Username:</label>
+                    <input type="text" id="sshUser" value="ec2-user" required>
+                </div>
+                <div class="form-group">
+                    <label for="keyFile">SSH Key File (.pem):</label>
+                    <input type="file" id="keyFile" accept=".pem" required>
+                </div>
+                <button type="submit">Connect</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Launch Status Modal -->
+    <div id="launchStatusModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Instance Launch Status</h2>
+            <div id="launchStatus">
+                <p>Launching instance...</p>
+                <div class="loader"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loader overlay -->
+    <div id="loaderOverlay" class="loader-overlay" style="display: none;">
+        <div class="loader"></div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const instancesList = document.getElementById('instancesList');
+        const templatesList = document.getElementById('templatesList');
+        const refreshBtn = document.getElementById('refreshInstances');
+        const launchBtn = document.getElementById('launchInstanceBtn');
+        const connectModal = document.getElementById('connectModal');
+        const launchStatusModal = document.getElementById('launchStatusModal');
+        const connectForm = document.getElementById('connectForm');
+        let selectedTemplateId = null;
+
+        // Utility functions
+        function showLoader() {
+            document.getElementById('loaderOverlay').style.display = 'flex';
+        }
+
+        function hideLoader() {
+            document.getElementById('loaderOverlay').style.display = 'none';
+        }
+
+        // Load instances
+        async function loadInstances() {
+            showLoader();
+            try {
+                const response = await fetch('/api/compute/instances');
+                if (!response.ok) throw new Error('Failed to load instances');
+                const instances = await response.json();
+                
+                instancesList.innerHTML = '';
+                if (instances.length === 0) {
+                    instancesList.innerHTML = '<tr><td colspan="5">No running instances found</td></tr>';
+                } else {
+                    instances.forEach(instance => {
+                        const row = document.createElement('tr');
+                        
+                        row.innerHTML = `
+                            <td>${instance.id}</td>
+                            <td>${instance.type}</td>
+                            <td>${instance.publicIp || 'N/A'}</td>
+                            <td>${instance.keyName || 'N/A'}</td>
+                            <td>
+                                ${instance.publicIp ? 
+                                    `<button class="connect-btn" data-ip="${instance.publicIp}" data-key="${instance.keyName}">
+                                        Connect
+                                    </button>` : 
+                                    'N/A'}
+                            </td>
+                        `;
+                        
+                        instancesList.appendChild(row);
+                    });
+                    
+                    // Add event listeners to connect buttons
+                    document.querySelectorAll('.connect-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const ip = e.target.getAttribute('data-ip');
+                            const keyName = e.target.getAttribute('data-key');
+                            showConnectModal(ip, keyName);
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading instances:', error);
+                instancesList.innerHTML = '<tr><td colspan="5">Error loading instances</td></tr>';
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // Load templates
+        async function loadTemplates() {
+            showLoader();
+            try {
+                const response = await fetch('/api/compute/templates');
+                if (!response.ok) throw new Error('Failed to load templates');
+                const templates = await response.json();
+                
+                templatesList.innerHTML = '';
+                if (templates.length === 0) {
+                    templatesList.innerHTML = '<tr><td colspan="4">No launch templates found</td></tr>';
+                } else {
+                    templates.forEach(template => {
+                        const row = document.createElement('tr');
+                        
+                        row.innerHTML = `
+                            <td><input type="radio" name="template" value="${template.id}"></td>
+                            <td>${template.name}</td>
+                            <td>${template.id}</td>
+                            <td>${new Date(template.created).toLocaleString()}</td>
+                        `;
+                        
+                        templatesList.appendChild(row);
+                    });
+                    
+                    // Add event listeners to radio buttons
+                    document.querySelectorAll('input[name="template"]').forEach(radio => {
+                        radio.addEventListener('change', (e) => {
+                            selectedTemplateId = e.target.value;
+                            launchBtn.disabled = false;
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                templatesList.innerHTML = '<tr><td colspan="4">Error loading templates</td></tr>';
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // Show connect modal
+        function showConnectModal(ip, keyName) {
+            document.getElementById('sshUser').value = 'ec2-user';
+            document.getElementById('keyFile').value = '';
+            connectModal.style.display = 'block';
+            
+            // Pre-fill key name if available
+            if (keyName) {
+                document.getElementById('keyFile').placeholder = `Recommended: ${keyName}`;
+            }
+        }
+
+        // Launch instance
+        async function launchInstance() {
+            if (!selectedTemplateId) return;
+            
+            showLoader();
+            launchStatusModal.style.display = 'block';
+            document.getElementById('launchStatus').innerHTML = `
+                <p>Launching instance...</p>
+                <div class="loader"></div>
+            `;
+            
+            try {
+                const response = await fetch('/api/compute/launch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ templateId: selectedTemplateId })
+                });
+                
+                if (!response.ok) throw new Error('Failed to launch instance');
+                const data = await response.json();
+                
+                // Poll for instance status
+                const pollStatus = async () => {
+                    const statusResponse = await fetch(`/api/compute/status/${data.instanceId}`);
+                    const status = await statusResponse.json();
+                    
+                    if (status.status === 'running') {
+                        document.getElementById('launchStatus').innerHTML = `
+                            <p>Instance launched successfully!</p>
+                            <p>Instance ID: ${data.instanceId}</p>
+                            ${status.publicIp ? `<p>Public IP: ${status.publicIp}</p>` : ''}
+                            <button onclick="launchStatusModal.style.display='none'; loadInstances();">
+                                Close
+                            </button>
+                        `;
+                    } else if (status.status === 'pending') {
+                        setTimeout(pollStatus, 3000);
+                        document.getElementById('launchStatus').innerHTML = `
+                            <p>Instance is starting up...</p>
+                            <div class="loader"></div>
+                        `;
+                    } else {
+                        throw new Error(`Instance status: ${status.status}`);
+                    }
+                };
+                
+                pollStatus();
+            } catch (error) {
+                console.error('Error launching instance:', error);
+                document.getElementById('launchStatus').innerHTML = `
+                    <p class="error">Failed to launch instance: ${error.message}</p>
+                    <button onclick="launchStatusModal.style.display='none'">
+                        Close
+                    </button>
+                `;
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // Handle SSH connection
+        async function handleConnect(e) {
+            e.preventDefault();
+            const ip = document.getElementById('connectModal').getAttribute('data-ip');
+            const user = document.getElementById('sshUser').value;
+            const keyFile = document.getElementById('keyFile').files[0];
+            
+            if (!keyFile) {
+                alert('Please select an SSH key file');
+                return;
+            }
+            
+            showLoader();
+            try {
+                const formData = new FormData();
+                formData.append('keyFile', keyFile);
+                
+                const response = await fetch('/api/compute/upload-key', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Failed to upload key');
+                const { keyPath, keyName } = await response.json();
+                
+                // Build SSH command
+                const sshCommand = `ssh -i "${keyPath}" ${user}@${ip}`;
+                
+                // Execute based on platform
+                if (navigator.platform.includes('Win')) {
+                    // Windows - open in new terminal
+                    const cmdCommand = `start cmd /k "echo ${sshCommand} && ${sshCommand}"`;
+                    const wslCommand = `start cmd /k "wsl ${sshCommand}"`;
+                    
+                    // Try WSL first, fallback to regular cmd
+                    try {
+                        await fetch('wsl --version');
+                        window.open(`cmd://${wslCommand}`);
+                    } catch {
+                        window.open(`cmd://${cmdCommand}`);
+                    }
+                } else {
+                    // Unix-like - open in new terminal
+                    const terminalCommand = `x-terminal-emulator -e '${sshCommand}'`;
+                    window.open(terminalCommand, '_blank');
+                }
+                
+                connectModal.style.display = 'none';
+            } catch (error) {
+                console.error('Error connecting:', error);
+                alert(`Failed to connect: ${error.message}`);
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // Event listeners
+        refreshBtn.addEventListener('click', loadInstances);
+        launchBtn.addEventListener('click', launchInstance);
+        connectForm.addEventListener('submit', handleConnect);
+        
+        // Close modals when clicking X
+        document.querySelectorAll('.modal .close').forEach(closeBtn => {
+            closeBtn.addEventListener('click', () => {
+                closeBtn.closest('.modal').style.display = 'none';
+            });
+        });
+        
+        // Close modals when clicking outside
+        window.addEventListener('click', (event) => {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadRegionInfo();
+            loadInstances();
+            loadTemplates();
+        });
+
+        // Reuse these functions from other pages
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user');
+                if (!response.ok) throw new Error('Failed to load user info');
+                const user = await response.json();
+                
+                let displayName = user.arn;
+                if (user.userName) {
+                    displayName = user.userName;
+                } else if (user.arn.includes('assumed-role')) {
+                    displayName = user.arn.split('/').slice(1).join('/');
+                }
+                
+                document.getElementById('userName').textContent = displayName;
+                document.getElementById('userName').title = `ARN: ${user.arn}\nAccount: ${user.account}\nUser ID: ${user.userId}`;
+            } catch (error) {
+                console.error('Error loading user info:', error);
+                document.getElementById('userName').textContent = 'Unknown user';
+            }
+        }
+
+        async function loadRegionInfo() {
+            try {
+                const response = await fetch('/api/region');
+                if (!response.ok) throw new Error('Failed to load region info');
+                const region = await response.json();
+                
+                const regionElement = document.getElementById('regionInfo');
+                regionElement.textContent = `Region: ${region.region}`;
+                if (region.isDefault) {
+                    regionElement.title = 'Using default region (us-east-1)';
+                } else {
+                    regionElement.title = 'Configured region';
+                }
+            } catch (error) {
+                console.error('Error loading region info:', error);
+                document.getElementById('regionInfo').textContent = 'Region: Unknown';
+            }
+        }
+    </script>
+</body>
+</html>

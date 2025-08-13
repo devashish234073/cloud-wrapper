@@ -1,0 +1,124 @@
+/* Compute-specific styles */
+.refresh-bar {
+    margin-bottom: 15px;
+}
+
+.launch-controls {
+    margin-top: 15px;
+    text-align: right;
+}
+
+.connect-btn {
+    padding: 5px 10px;
+    background-color: #2ecc71;
+    color: white;
+}
+
+.connect-btn:hover {
+    background-color: #27ae60;
+}
+
+#instancesTable, #templatesTable {
+    margin-bottom: 30px;
+}
+
+#launchStatus {
+    text-align: center;
+    padding: 20px;
+}
+
+#launchStatus .loader {
+    margin: 20px auto;
+}
+
+.modal-content {
+    max-width: 500px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group input[type="file"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.error {
+    color: #e74c3c;
+}
+
+/* Table Styles */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 0.9em;
+}
+
+th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Specific table adjustments */
+#instancesTable {
+    margin-top: 20px;
+}
+
+#instancesTable td:nth-child(3), 
+#instancesTable td:nth-child(4) {
+    font-family: monospace;
+}
+
+/* Button in table cell */
+td button {
+    margin: 0;
+    padding: 5px 10px;
+    font-size: 0.8em;
+}
+
+/* Warning icon for templates */
+.warning-icon {
+    color: #f39c12;
+    margin-right: 5px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    table {
+        display: block;
+        overflow-x: auto;
+    }
+    
+    th, td {
+        padding: 8px 10px;
+        font-size: 0.8em;
+    }
+}
+
+.na-value {
+    color: #95a5a6;
+    font-style: italic;
+}

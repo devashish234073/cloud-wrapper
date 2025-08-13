@@ -1,0 +1,68 @@
+/* ai.css - AI page specific styles */
+.model-selector {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.model-selector select {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.model-details {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border: 1px solid #e1e4e8;
+}
+
+.model-details h4 {
+    margin-top: 0;
+    color: #2c3e50;
+}
+
+.model-details p {
+    margin: 5px 0;
+}
+
+.prompt-container, .response-container {
+    margin-bottom: 20px;
+}
+
+.prompt-container textarea, 
+.response-container textarea {
+    width: 100%;
+    min-height: 100px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+}
+
+.response-container textarea {
+    background-color: #f8f9fa;
+}
+
+.param-group {
+    margin-bottom: 15px;
+}
+
+.param-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.param-group input[type="range"] {
+    width: 100%;
+}
+
+.param-group span {
+    display: inline-block;
+    width: 30px;
+    text-align: center;
+}

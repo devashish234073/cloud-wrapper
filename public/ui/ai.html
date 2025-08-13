@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Model Manager</title>
+    <link rel="stylesheet" href="common_style.css">
+    <link rel="stylesheet" href="ai.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AI Model Manager</h1>
+            <div class="user-info">
+                <span id="userName">Loading user...</span>
+                <span id="regionInfo" class="region-info"></span>
+            </div>
+        </header>
+
+        <div class="content">
+            <div class="sidebar">
+                <h3>Model Parameters</h3>
+                <div class="param-group">
+                    <label for="temperature">Temperature:</label>
+                    <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.5">
+                    <span id="tempValue">0.5</span>
+                </div>
+                <div class="param-group">
+                    <label for="topP">Top P:</label>
+                    <input type="range" id="topP" min="0" max="1" step="0.1" value="0.9">
+                    <span id="topPValue">0.9</span>
+                </div>
+            </div>
+            <div class="main">
+                <div class="model-selector">
+                    <select id="modelSelect">
+                        <option value="">Loading models...</option>
+                    </select>
+                    <button id="fetchDetailsBtn" disabled>Fetch Details</button>
+                </div>
+                
+                <div id="modelDetails" class="model-details"></div>
+                
+                <div class="prompt-container">
+                    <h3>Prompt</h3>
+                    <textarea id="promptInput" placeholder="Enter your prompt here..."></textarea>
+                    <button id="sendPromptBtn" disabled>Send Prompt</button>
+                </div>
+                
+                <div class="response-container">
+                    <h3>Response</h3>
+                    <textarea id="responseOutput" readonly></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loader overlay -->
+    <div id="loaderOverlay" class="loader-overlay" style="display: none;">
+        <div class="loader"></div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const modelSelect = document.getElementById('modelSelect');
+        const fetchDetailsBtn = document.getElementById('fetchDetailsBtn');
+        const modelDetails = document.getElementById('modelDetails');
+        const promptInput = document.getElementById('promptInput');
+        const sendPromptBtn = document.getElementById('sendPromptBtn');
+        const responseOutput = document.getElementById('responseOutput');
+        const temperatureSlider = document.getElementById('temperature');
+        const topPSlider = document.getElementById('topP');
+        const tempValue = document.getElementById('tempValue');
+        const topPValue = document.getElementById('topPValue');
+
+        // Current selected model
+        let currentModelId = '';
+        
+        // Utility functions
+        function showLoader() {
+            document.getElementById('loaderOverlay').style.display = 'flex';
+        }
+
+        function hideLoader() {
+            document.getElementById('loaderOverlay').style.display = 'none';
+        }
+
+        function formatModelDetails(details) {
+            return `
+                <h4>${details.modelName}</h4>
+                <p><strong>Provider:</strong> ${details.providerName}</p>
+                <p><strong>ID:</strong> ${details.modelId}</p>
+                <p><strong>Input Modalities:</strong> ${details.inputModalities.join(', ')}</p>
+                <p><strong>Output Modalities:</strong> ${details.outputModalities.join(', ')}</p>
+                <p><strong>Supported Customizations:</strong> ${details.customizationsSupported?.join(', ') || 'None'}</p>
+            `;
+        }
+
+        // Load models
+        async function loadModels() {
+            showLoader();
+            try {
+                const response = await fetch('/api/ai/models');
+                if (!response.ok) throw new Error('Failed to load models');
+                const models = await response.json();
+                
+                modelSelect.innerHTML = '';
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.modelId;
+                    option.textContent = `${model.providerName} - ${model.modelName}`;
+                    modelSelect.appendChild(option);
+                });
+                
+                modelSelect.disabled = false;
+                fetchDetailsBtn.disabled = false;
+            } catch (error) {
+                console.error('Error loading models:', error);
+                modelSelect.innerHTML = '<option value="">Error loading models</option>';
+            } finally {
+                hideLoader();
+            }
+        }
+
+        // Event listeners
+        modelSelect.addEventListener('change', (e) => {
+            currentModelId = e.target.value;
+            sendPromptBtn.disabled = !currentModelId;
+        });
+
+        fetchDetailsBtn.addEventListener('click', async () => {
+            if (!currentModelId) return;
+            
+            showLoader();
+            try {
+                const response = await fetch(`/api/ai/models/${encodeURIComponent(currentModelId)}`);
+                if (!response.ok) throw new Error('Failed to load model details');
+                const details = await response.json();
+                
+                modelDetails.innerHTML = formatModelDetails(details);
+            } catch (error) {
+                console.error('Error loading model details:', error);
+                modelDetails.innerHTML = `<p class="error">Error loading details: ${error.message}</p>`;
+            } finally {
+                hideLoader();
+            }
+        });
+
+        sendPromptBtn.addEventListener('click', async () => {
+            const prompt = promptInput.value.trim();
+            if (!prompt || !currentModelId) return;
+            
+            const temperature = parseFloat(temperatureSlider.value);
+            const topP = parseFloat(topPSlider.value);
+            
+            showLoader();
+            try {
+                const response = await fetch('/api/ai/invoke', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        modelId: currentModelId,
+                        prompt,
+                        temperature,
+                        topP
+                    })
+                });
+                
+                if (!response.ok) throw new Error('Failed to get response');
+                const data = await response.json();
+                
+                responseOutput.value = data.response;
+            } catch (error) {
+                console.error('Error invoking model:', error);
+                responseOutput.value = `Error: ${error.message}`;
+            } finally {
+                hideLoader();
+            }
+        });
+
+        // Parameter sliders
+        temperatureSlider.addEventListener('input', () => {
+            tempValue.textContent = temperatureSlider.value;
+        });
+
+        topPSlider.addEventListener('input', () => {
+            topPValue.textContent = topPSlider.value;
+        });
+
+        // Load user info and region (reuse functions from objectStore)
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user');
+                if (!response.ok) throw new Error('Failed to load user info');
+                const user = await response.json();
+                
+                let displayName = user.arn;
+                if (user.userName) {
+                    displayName = user.userName;
+                } else if (user.arn.includes('assumed-role')) {
+                    displayName = user.arn.split('/').slice(1).join('/');
+                }
+                
+                document.getElementById('userName').textContent = displayName;
+                document.getElementById('userName').title = `ARN: ${user.arn}\nAccount: ${user.account}\nUser ID: ${user.userId}`;
+            } catch (error) {
+                console.error('Error loading user info:', error);
+                document.getElementById('userName').textContent = 'Unknown user';
+            }
+        }
+
+        async function loadRegionInfo() {
+            try {
+                const response = await fetch('/api/region');
+                if (!response.ok) throw new Error('Failed to load region info');
+                const region = await response.json();
+                
+                const regionElement = document.getElementById('regionInfo');
+                regionElement.textContent = `Region: ${region.region}`;
+                if (region.isDefault) {
+                    regionElement.title = 'Using default region (us-east-1)';
+                } else {
+                    regionElement.title = 'Configured region';
+                }
+            } catch (error) {
+                console.error('Error loading region info:', error);
+                document.getElementById('regionInfo').textContent = 'Region: Unknown';
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadUserInfo();
+            loadRegionInfo();
+            loadModels();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Object Store</title>
+    <link rel="stylesheet" href="objectStore.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Object Store</h1>
+            <div class="user-info" id="userInfo">
+                <span id="userName">Loading user...</span>
+                <span id="regionInfo" class="region-info"></span>
+            </div>
+            <div class="actions">
+                <button id="createBucketBtn">Create Bucket</button>
+                <button id="createFolderBtn">Create Folder</button>
+                <button id="uploadFileBtn">Upload File</button>
+            </div>
+        </header>
+
+        <div class="breadcrumb" id="breadcrumb"></div>
+
+        <div class="content">
+            <div class="sidebar">
+                <h3>Storage Buckets</h3>
+                <ul id="bucketsList"></ul>
+            </div>
+            <div class="main">
+                <table id="objectsTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Size</th>
+                            <th>Last Modified</th>
+                        </tr>
+                    </thead>
+                    <tbody id="objectsList"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="createFolderModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Create New Folder</h2>
+            <form id="createFolderForm">
+                <div class="form-group">
+                    <label for="folderName">Folder Name:</label>
+                    <input type="text" id="folderName" required>
+                </div>
+                <button type="submit">Create</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="uploadFileModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Upload File</h2>
+            <form id="uploadFileForm">
+                <div class="form-group">
+                    <label for="fileInput">Select File:</label>
+                    <input type="file" id="fileInput" required>
+                </div>
+                <div class="form-group">
+                    <label for="uploadPath">Path (optional):</label>
+                    <input type="text" id="uploadPath" placeholder="folder/subfolder/">
+                </div>
+                <button type="submit">Upload</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="loaderOverlay" class="loader-overlay" style="display: none;">
+        <div class="loader"></div>
+    </div>
+
+    <div id="createBucketModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Create New Bucket</h2>
+            <form id="createBucketForm">
+                <div class="form-group">
+                    <label for="newBucketName">Bucket Name:</label>
+                    <input type="text" id="newBucketName" required pattern="[a-z0-9.-]+"
+                        title="Lowercase letters, numbers, hyphens, and periods only">
+                    <small class="hint">Must be DNS-compliant (lowercase, numbers, hyphens)</small>
+                </div>
+                <button type="submit">Create</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentPath = '';
+
+        // DOM Elements
+        const bucketsList = document.getElementById('bucketsList');
+        const objectsList = document.getElementById('objectsList');
+        const breadcrumb = document.getElementById('breadcrumb');
+        const createFolderBtn = document.getElementById('createFolderBtn');
+        const uploadFileBtn = document.getElementById('uploadFileBtn');
+        const createFolderModal = document.getElementById('createFolderModal');
+        const uploadFileModal = document.getElementById('uploadFileModal');
+        const createFolderForm = document.getElementById('createFolderForm');
+        const uploadFileForm = document.getElementById('uploadFileForm');
+        const closeButtons = document.getElementsByClassName('close');
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            loadBuckets();
+            loadUserInfo();
+            loadRegionInfo();
+        });
+        createFolderBtn.addEventListener('click', () => createFolderModal.style.display = 'block');
+        uploadFileBtn.addEventListener('click', () => uploadFileModal.style.display = 'block');
+
+        Array.from(closeButtons).forEach(btn => {
+            btn.addEventListener('click', () => {
+                createFolderModal.style.display = 'none';
+                uploadFileModal.style.display = 'none';
+            });
+        });
+
+        // Add to DOM elements
+        const createBucketBtn = document.getElementById('createBucketBtn');
+        const createBucketModal = document.getElementById('createBucketModal');
+        const createBucketForm = document.getElementById('createBucketForm');
+
+        // Add event listeners
+        createBucketBtn.addEventListener('click', () => createBucketModal.style.display = 'block');
+
+        createBucketForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const bucketName = document.getElementById('newBucketName').value.trim().toLowerCase();
+
+            if (!bucketName) {
+                alert('Please enter a container name');
+                return;
+            }
+
+            try {
+                showLoader();
+                createBucketModal.style.display = 'none';
+
+                const response = await fetch('/api/objectStore/buckets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bucketName })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to create bucket');
+                }
+
+                // Refresh the bucket list
+                await loadBuckets();
+                alert('Storage container created successfully');
+            } catch (error) {
+                console.error('Error creating bucket:', error);
+                alert(`Failed to create container: ${error.message}`);
+            } finally {
+                hideLoader();
+                document.getElementById('newBucketName').value = '';
+            }
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target === createBucketModal) createBucketModal.style.display = 'none';
+            if (event.target === createFolderModal) createFolderModal.style.display = 'none';
+            if (event.target === uploadFileModal) uploadFileModal.style.display = 'none';
+        });
+
+        createFolderForm.addEventListener('submit', handleCreateFolder);
+        uploadFileForm.addEventListener('submit', handleUploadFile);
+
+        // Functions
+        /*async function loadBuckets() {
+            try {
+                const response = await fetch('/api/objectStore/buckets');
+                const buckets = await response.json();
+
+                bucketsList.innerHTML = '';
+                buckets.forEach(bucket => {
+                    const li = document.createElement('li');
+                    li.textContent = bucket.name;
+                    li.addEventListener('click', () => loadBucketContents(bucket.name));
+                    bucketsList.appendChild(li);
+                });
+            } catch (error) {
+                console.error('Error loading buckets:', error);
+                alert('Failed to load storage containers');
+            }
+        }*/
+
+        async function loadBucketContents(bucketName, prefix = '') {
+            try {
+                const path = prefix ? `${bucketName}/${prefix}` : bucketName;
+                const response = await fetch(`/api/objectStore/buckets/${path}`);
+                const data = await response.json();
+
+                currentPath = path;
+                updateBreadcrumb(data.path);
+                renderObjects(data.items);
+            } catch (error) {
+                console.error('Error loading bucket contents:', error);
+                alert('Failed to load container contents');
+            }
+        }
+
+        function renderObjects(items) {
+            objectsList.innerHTML = '';
+
+            items.forEach(item => {
+                const row = document.createElement('tr');
+
+                const nameCell = document.createElement('td');
+                const nameLink = document.createElement('a');
+                nameLink.textContent = item.name;
+                nameLink.href = '#';
+                nameLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (item.type === 'folder') {
+                        loadBucketContents(item.path.split('/')[0], item.path.split('/').slice(1).join('/'));
+                    } else {
+                        downloadFile(item.path);
+                    }
+                });
+                nameCell.appendChild(nameLink);
+
+                const typeCell = document.createElement('td');
+                typeCell.textContent = item.type;
+
+                const sizeCell = document.createElement('td');
+                sizeCell.textContent = item.type === 'file' ? formatFileSize(item.size) : '-';
+
+                const dateCell = document.createElement('td');
+                dateCell.textContent = item.lastModified ? new Date(item.lastModified).toLocaleString() : '-';
+
+                row.appendChild(nameCell);
+                row.appendChild(typeCell);
+                row.appendChild(sizeCell);
+                row.appendChild(dateCell);
+
+                objectsList.appendChild(row);
+            });
+        }
+
+        function updateBreadcrumb(path) {
+            breadcrumb.innerHTML = '';
+
+            const parts = path.split('/');
+            parts.forEach((part, index) => {
+                if (!part) return;
+
+                const link = document.createElement('a');
+                link.textContent = part;
+                link.href = '#';
+
+                const currentParts = parts.slice(0, index + 1);
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (currentParts.length === 1) {
+                        loadBucketContents(currentParts[0]);
+                    } else {
+                        loadBucketContents(currentParts[0], currentParts.slice(1).join('/'));
+                    }
+                });
+
+                breadcrumb.appendChild(link);
+                if (index < parts.length - 1 && parts[index + 1]) {
+                    breadcrumb.appendChild(document.createTextNode(' / '));
+                }
+            });
+        }
+
+        function downloadFile(path) {
+            window.open(`/api/objectStore/download/${path}`, '_blank');
+        }
+
+        async function handleCreateFolder(e) {
+            e.preventDefault();
+            const folderName = document.getElementById('folderName').value.trim();
+
+            if (!folderName) {
+                alert('Please enter a folder name');
+                return;
+            }
+
+            const bucketName = currentPath.split('/')[0];
+            const currentPrefix = currentPath.split('/').slice(1).join('/');
+            const folderPath = currentPrefix ? `${currentPrefix}/${folderName}` : folderName;
+
+            try {
+                const response = await fetch('/api/objectStore/folders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bucketName, folderPath })
+                });
+
+                if (response.ok) {
+                    alert('Folder created successfully');
+                    createFolderModal.style.display = 'none';
+                    document.getElementById('folderName').value = '';
+                    loadBucketContents(bucketName, currentPrefix);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error);
+                }
+            } catch (error) {
+                console.error('Error creating folder:', error);
+                alert(`Failed to create folder: ${error.message}`);
+            }
+        }
+
+        async function handleUploadFile(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            const uploadPath = document.getElementById('uploadPath').value.trim();
+
+            if (fileInput.files.length === 0) {
+                alert('Please select a file to upload');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const bucketName = currentPath.split('/')[0];
+            const currentPrefix = currentPath.split('/').slice(1).join('/');
+
+            let filePath = file.name;
+            if (uploadPath) filePath = `${uploadPath}/${file.name}`;
+            else if (currentPrefix) filePath = `${currentPrefix}/${file.name}`;
+
+            try {
+                const fileContent = await readFileAsBase64(file);
+
+                const response = await fetch('/api/objectStore/upload', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bucketName,
+                        filePath,
+                        fileContent,
+                        contentType: file.type
+                    })
+                });
+
+                if (response.ok) {
+                    alert('File uploaded successfully');
+                    uploadFileModal.style.display = 'none';
+                    fileInput.value = '';
+                    document.getElementById('uploadPath').value = '';
+                    loadBucketContents(bucketName, currentPrefix);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error);
+                }
+            } catch (error) {
+                console.error('Error uploading file:', error);
+                alert(`Failed to upload file: ${error.message}`);
+            }
+        }
+
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Add these utility functions
+        function showLoader() {
+            document.getElementById('loaderOverlay').style.display = 'flex';
+        }
+
+        function hideLoader() {
+            document.getElementById('loaderOverlay').style.display = 'none';
+        }
+
+        // Modify loadBuckets function
+        async function loadBuckets() {
+            showLoader();
+            try {
+                const response = await fetch('/api/objectStore/buckets');
+                if (!response.ok) throw new Error('Failed to load buckets');
+                const buckets = await response.json();
+
+                bucketsList.innerHTML = '';
+                if (buckets.length === 0) {
+                    bucketsList.innerHTML = '<li class="no-buckets">No storage containers found</li>';
+                } else {
+                    buckets.forEach(bucket => {
+                        const li = document.createElement('li');
+                        li.textContent = bucket.name;
+                        li.addEventListener('click', () => loadBucketContents(bucket.name));
+                        bucketsList.appendChild(li);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading buckets:', error);
+                alert('Failed to load storage containers');
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function loadRegionInfo() {
+            try {
+                const response = await fetch('/api/region');
+                if (!response.ok) throw new Error('Failed to load region info');
+                const region = await response.json();
+
+                const regionElement = document.getElementById('regionInfo');
+                regionElement.textContent = `Region: ${region.region}`;
+                if (region.isDefault) {
+                    regionElement.title = 'Using default region (us-east-1)';
+                } else {
+                    regionElement.title = 'Configured region';
+                }
+            } catch (error) {
+                console.error('Error loading region info:', error);
+                document.getElementById('regionInfo').textContent = 'Region: Unknown';
+            }
+        }
+
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user');  // Updated endpoint
+                if (!response.ok) throw new Error('Failed to load user info');
+                const user = await response.json();
+
+                let displayName = user.arn;
+                if (user.userName) {
+                    displayName = user.userName;
+                } else if (user.arn.includes('assumed-role')) {
+                    displayName = user.arn.split('/').slice(1).join('/');
+                }
+
+                document.getElementById('userName').textContent = displayName;
+                document.getElementById('userName').title = `ARN: ${user.arn}\nAccount: ${user.account}\nUser ID: ${user.userId}`;
+            } catch (error) {
+                console.error('Error loading user info:', error);
+                document.getElementById('userName').textContent = 'Unknown user';
+            }
+        }
+    </script>
+</body>
+
+</html>
