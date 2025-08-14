@@ -4,6 +4,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const { exec } = require('child_process');
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -11,6 +12,54 @@ const upload = multer({ dest: 'uploads/' });
  * List all running EC2 instances
  */
 router.get('/instances', async (req, res) => {
+    try {
+        const ec2 = new AWS.EC2({
+            region: AWS.config.region || process.env.AWS_REGION || 'us-east-1'
+        });
+
+        const params = {
+            Filters: [{ Name: 'instance-state-name', Values: ['running'] }]
+        };
+
+        const data = await ec2.describeInstances(params).promise();
+
+        const instances = await Promise.all(data.Reservations.flatMap(async reservation => {
+            return Promise.all(reservation.Instances.map(async instance => {
+                let username = 'unknown';
+                try {
+                    const imageData = await ec2.describeImages({ ImageIds: [instance.ImageId] }).promise();
+                    const imageName = imageData.Images[0]?.Name?.toLowerCase() || '';
+
+                    if (imageName.includes('ubuntu')) username = 'ubuntu';
+                    else if (imageName.includes('amzn') || imageName.includes('amazon linux')) username = 'ec2-user';
+                    else if (imageName.includes('centos')) username = 'centos';
+                    else if (imageName.includes('debian')) username = 'admin';
+                    else if (imageName.includes('rhel') || imageName.includes('red hat')) username = 'ec2-user';
+                    else if (imageName.includes('suse')) username = 'ec2-user';
+                } catch (e) {
+                    console.error(`Error getting username for ${instance.InstanceId}`, e);
+                }
+
+                return {
+                    id: instance.InstanceId,
+                    type: instance.InstanceType,
+                    state: instance.State.Name,
+                    publicIp: instance.PublicIpAddress,
+                    keyName: instance.KeyName,
+                    launchTime: instance.LaunchTime,
+                    imageId: instance.ImageId,
+                    username
+                };
+            }));
+        }));
+
+        res.json(instances.flat());
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message });
+    }
+});
+/*router.get('/instances', async (req, res) => {
     try {
         const params = {
             Filters: [{ Name: 'instance-state-name', Values: ['running'] }]
@@ -35,7 +84,7 @@ router.get('/instances', async (req, res) => {
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
-});
+});*/
 
 /**
  * List all launch templates
@@ -155,11 +204,35 @@ router.post('/upload-key', upload.single('keyFile'), async (req, res) => {
         }
 
         const keyPath = path.join(__dirname, 'uploads', req.file.originalname);
+        // If file already exists, return success without replacing it
+        if (fs.existsSync(keyPath)) {
+            console.log(`Key file already exists: ${keyPath}`);
+            // Remove the temporary uploaded file since we won't use it
+            fs.unlinkSync(req.file.path);
+
+            return res.json({
+                keyPath: keyPath,
+                keyName: req.file.originalname,
+                message: 'File already exists, using existing key.'
+            });
+        }
+
         fs.renameSync(req.file.path, keyPath);
 
-        // Set permissions (Linux/Mac only)
-        if (process.platform !== 'win32') {
+        if (process.platform === 'win32') {
+            // Windows: Restrict to current user read-only
+            const { execSync } = require('child_process');
+            try {
+                execSync(`icacls "${keyPath}" /inheritance:r /grant:r "%USERNAME%:R"`);
+                console.log('Set Windows private key permissions successfully');
+            } catch (err) {
+                console.error('Failed to set Windows permissions:', err);
+                throw new Error('Could not set key file permissions on Windows');
+            }
+        } else {
+            // Linux / macOS: Owner read-only
             fs.chmodSync(keyPath, 0o400);
+            console.log('Set Unix private key permissions to 400');
         }
 
         res.json({

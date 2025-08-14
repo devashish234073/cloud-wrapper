@@ -6,6 +6,7 @@ const user = require('./user');
 const region = require('./region');
 const ai = require('./ai');
 const compute = require('./compute');
+const launchCmdRouter = require('./launchCmd');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -21,6 +22,7 @@ app.use('/api/user', user);
 app.use('/api/region', region);
 app.use('/api/ai', ai);
 app.use('/api/compute', compute);
+app.use('/api/launch-cmd', launchCmdRouter);
 
 // UI Route
 app.get('/ui/objectStore', (req, res) => {

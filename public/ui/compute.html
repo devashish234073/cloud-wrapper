@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="common_style.css">
     <link rel="stylesheet" href="compute.css">
 </head>
+
 <body>
     <div class="container">
         <header>
@@ -30,6 +32,7 @@
                             <th>Type</th>
                             <th>Public IP</th>
                             <th>Key Pair</th>
+                            <th>Username</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -118,37 +121,39 @@
                 const response = await fetch('/api/compute/instances');
                 if (!response.ok) throw new Error('Failed to load instances');
                 const instances = await response.json();
-                
+
                 instancesList.innerHTML = '';
                 if (instances.length === 0) {
                     instancesList.innerHTML = '<tr><td colspan="5">No running instances found</td></tr>';
                 } else {
                     instances.forEach(instance => {
                         const row = document.createElement('tr');
-                        
+
                         row.innerHTML = `
                             <td>${instance.id}</td>
                             <td>${instance.type}</td>
                             <td>${instance.publicIp || 'N/A'}</td>
                             <td>${instance.keyName || 'N/A'}</td>
+                            <td>${instance.username || 'N/A'}</td>
                             <td>
-                                ${instance.publicIp ? 
-                                    `<button class="connect-btn" data-ip="${instance.publicIp}" data-key="${instance.keyName}">
+                                ${instance.publicIp ?
+                                `<button class="connect-btn" id="${"ip_"+instance.publicIp}" data-user="${instance.username}" data-ip="${instance.publicIp}" data-key="${instance.keyName}">
                                         Connect
-                                    </button>` : 
-                                    'N/A'}
+                                    </button>` :
+                                'N/A'}
                             </td>
                         `;
-                        
+
                         instancesList.appendChild(row);
                     });
-                    
+
                     // Add event listeners to connect buttons
                     document.querySelectorAll('.connect-btn').forEach(btn => {
                         btn.addEventListener('click', (e) => {
                             const ip = e.target.getAttribute('data-ip');
+                            const user = e.target.getAttribute('data-user');
                             const keyName = e.target.getAttribute('data-key');
-                            showConnectModal(ip, keyName);
+                            showConnectModal(ip, user, keyName);
                         });
                     });
                 }
@@ -167,24 +172,24 @@
                 const response = await fetch('/api/compute/templates');
                 if (!response.ok) throw new Error('Failed to load templates');
                 const templates = await response.json();
-                
+
                 templatesList.innerHTML = '';
                 if (templates.length === 0) {
                     templatesList.innerHTML = '<tr><td colspan="4">No launch templates found</td></tr>';
                 } else {
                     templates.forEach(template => {
                         const row = document.createElement('tr');
-                        
+
                         row.innerHTML = `
                             <td><input type="radio" name="template" value="${template.id}"></td>
                             <td>${template.name}</td>
                             <td>${template.id}</td>
                             <td>${new Date(template.created).toLocaleString()}</td>
                         `;
-                        
+
                         templatesList.appendChild(row);
                     });
-                    
+
                     // Add event listeners to radio buttons
                     document.querySelectorAll('input[name="template"]').forEach(radio => {
                         radio.addEventListener('change', (e) => {
@@ -202,11 +207,14 @@
         }
 
         // Show connect modal
-        function showConnectModal(ip, keyName) {
+        function showConnectModal(ip, user, keyName) {
+            sessionStorage.setItem('selectedIp', ip);
+            sessionStorage.setItem('selectedUser', user);
             document.getElementById('sshUser').value = 'ec2-user';
             document.getElementById('keyFile').value = '';
             connectModal.style.display = 'block';
-            
+            document.getElementById('sshUser').value = user || 'ec2-user';
+
             // Pre-fill key name if available
             if (keyName) {
                 document.getElementById('keyFile').placeholder = `Recommended: ${keyName}`;
@@ -216,29 +224,29 @@
         // Launch instance
         async function launchInstance() {
             if (!selectedTemplateId) return;
-            
+
             showLoader();
             launchStatusModal.style.display = 'block';
             document.getElementById('launchStatus').innerHTML = `
                 <p>Launching instance...</p>
                 <div class="loader"></div>
             `;
-            
+
             try {
                 const response = await fetch('/api/compute/launch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ templateId: selectedTemplateId })
                 });
-                
+
                 if (!response.ok) throw new Error('Failed to launch instance');
                 const data = await response.json();
-                
+
                 // Poll for instance status
                 const pollStatus = async () => {
                     const statusResponse = await fetch(`/api/compute/status/${data.instanceId}`);
                     const status = await statusResponse.json();
-                    
+
                     if (status.status === 'running') {
                         document.getElementById('launchStatus').innerHTML = `
                             <p>Instance launched successfully!</p>
@@ -258,7 +266,7 @@
                         throw new Error(`Instance status: ${status.status}`);
                     }
                 };
-                
+
                 pollStatus();
             } catch (error) {
                 console.error('Error launching instance:', error);
@@ -275,6 +283,52 @@
 
         // Handle SSH connection
         async function handleConnect(e) {
+            e.preventDefault();
+
+            const ip = sessionStorage.getItem('selectedIp');
+            const user = document.getElementById('sshUser').value;
+            const keyFile = document.getElementById('keyFile').files[0];
+
+            if (!keyFile) {
+                alert('Please select an SSH key file');
+                return;
+            }
+
+            showLoader();
+
+            try {
+                // Upload the key file
+                const formData = new FormData();
+                formData.append('keyFile', keyFile);
+
+                const uploadResp = await fetch('/api/compute/upload-key', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!uploadResp.ok) throw new Error('Failed to upload key');
+
+                const { keyPath } = await uploadResp.json();
+
+                // Call backend API to launch the SSH command
+                const cmdResp = await fetch('/api/launch-cmd', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip, user, keyPath })
+                });
+
+                if (!cmdResp.ok) throw new Error('Failed to launch SSH command');
+
+                alert('SSH command launched successfully!');
+                connectModal.style.display = 'none';
+            } catch (error) {
+                console.error('Error connecting:', error);
+                alert(`Failed to connect: ${error.message}`);
+            } finally {
+                hideLoader();
+            }
+        }
+        /*async function handleConnect(e) {
             e.preventDefault();
             const ip = document.getElementById('connectModal').getAttribute('data-ip');
             const user = document.getElementById('sshUser').value;
@@ -327,20 +381,20 @@
             } finally {
                 hideLoader();
             }
-        }
+        }*/
 
         // Event listeners
         refreshBtn.addEventListener('click', loadInstances);
         launchBtn.addEventListener('click', launchInstance);
         connectForm.addEventListener('submit', handleConnect);
-        
+
         // Close modals when clicking X
         document.querySelectorAll('.modal .close').forEach(closeBtn => {
             closeBtn.addEventListener('click', () => {
                 closeBtn.closest('.modal').style.display = 'none';
             });
         });
-        
+
         // Close modals when clicking outside
         window.addEventListener('click', (event) => {
             if (event.target.classList.contains('modal')) {
@@ -362,14 +416,14 @@
                 const response = await fetch('/api/user');
                 if (!response.ok) throw new Error('Failed to load user info');
                 const user = await response.json();
-                
+
                 let displayName = user.arn;
                 if (user.userName) {
                     displayName = user.userName;
                 } else if (user.arn.includes('assumed-role')) {
                     displayName = user.arn.split('/').slice(1).join('/');
                 }
-                
+
                 document.getElementById('userName').textContent = displayName;
                 document.getElementById('userName').title = `ARN: ${user.arn}\nAccount: ${user.account}\nUser ID: ${user.userId}`;
             } catch (error) {
@@ -383,7 +437,7 @@
                 const response = await fetch('/api/region');
                 if (!response.ok) throw new Error('Failed to load region info');
                 const region = await response.json();
-                
+
                 const regionElement = document.getElementById('regionInfo');
                 regionElement.textContent = `Region: ${region.region}`;
                 if (region.isDefault) {
@@ -398,4 +452,5 @@
         }
     </script>
 </body>
+
 </html>
