@@ -154,7 +154,7 @@ router.post('/upload-key', upload.single('keyFile'), async (req, res) => {
             throw new Error('No file uploaded');
         }
 
-        const keyPath = path.join(__dirname, '..', 'uploads', req.file.originalname);
+        const keyPath = path.join(__dirname, 'uploads', req.file.originalname);
         fs.renameSync(req.file.path, keyPath);
 
         // Set permissions (Linux/Mac only)
@@ -167,6 +167,7 @@ router.post('/upload-key', upload.single('keyFile'), async (req, res) => {
             keyName: req.file.originalname
         });
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: err.message });
     }
 });
