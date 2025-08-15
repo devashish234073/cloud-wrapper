@@ -29,8 +29,8 @@ The only permission the user need now to begin with is :
                 "iam:CreatePolicy"
             ],
             "Resource": [
-                "arn:aws:iam::250324392423:user/s3readwrite",
-                "arn:aws:iam::250324392423:policy/Custom-*"
+                "arn:aws:iam::<your-account-id>:user/s3readwrite",
+                "arn:aws:iam::<your-account-id>:policy/Custom-*"
             ]
         },
         {
