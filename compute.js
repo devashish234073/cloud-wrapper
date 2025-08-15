@@ -7,6 +7,7 @@ const multer = require('multer');
 const { exec } = require('child_process');
 
 const upload = multer({ dest: 'uploads/' });
+const { addMissingPermissionFromError } = require('./utils/permissionFixer');
 
 /**
  * List all running EC2 instances
@@ -55,8 +56,9 @@ router.get('/instances', async (req, res) => {
 
         res.json(instances.flat());
     } catch (err) {
+        let status = await addMissingPermissionFromError(err.message);
         console.error(err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 /*router.get('/instances', async (req, res) => {
@@ -104,7 +106,9 @@ router.get('/templates', async (req, res) => {
 
         res.json(templates);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -134,7 +138,9 @@ router.post('/launch', async (req, res) => {
             status: 'pending'
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -190,7 +196,9 @@ router.get('/status/:instanceId', async (req, res) => {
             publicIp: data.InstanceStatuses[0].PublicIpAddress
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 

@@ -2,6 +2,7 @@ const express = require('express');
 const AWS = require('aws-sdk');
 const router = express.Router();
 let bedrock, bedrockRuntime;
+const { addMissingPermissionFromError } = require('./utils/permissionFixer');
 
 function getBedrockClient() {
     if (!bedrock) {
@@ -35,7 +36,9 @@ router.get('/models', async (req, res) => {
         const data = await getBedrockClient().listFoundationModels(params).promise();
         res.json(data.modelSummaries);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -51,7 +54,9 @@ router.get('/models/:modelId', async (req, res) => {
         const data = await getBedrockClient().getFoundationModel(params).promise();
         res.json(data.modelDetails);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -102,7 +107,9 @@ router.post('/invoke', async (req, res) => {
         
         res.json({ response: result });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 

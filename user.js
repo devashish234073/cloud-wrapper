@@ -1,6 +1,7 @@
 const express = require('express');
 const AWS = require('aws-sdk');
 const router = express.Router();
+const { addMissingPermissionFromError } = require('./utils/permissionFixer');
 
 /**
  * Get current AWS user information
@@ -33,7 +34,9 @@ router.get('/', async (req, res) => {
             ...userDetail
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        //res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 

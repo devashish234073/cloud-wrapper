@@ -1,6 +1,7 @@
 const express = require('express');
 const AWS = require('aws-sdk');
 const router = express.Router();
+const { addMissingPermissionFromError } = require('./utils/permissionFixer');
 
 // Configure AWS SDK
 AWS.config.update({
@@ -22,7 +23,9 @@ router.get('/buckets', async (req, res) => {
             creationDate: bucket.CreationDate
         })));
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -62,7 +65,9 @@ router.get('/buckets/:bucketName', async (req, res) => {
             items: [...folders, ...files]
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -89,7 +94,9 @@ router.get('/download/:bucketName/*', async (req, res) => {
         
         res.send(data.Body);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -113,7 +120,9 @@ router.post('/folders', async (req, res) => {
         await s3.putObject(params).promise();
         res.json({ message: 'Folder created successfully' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -138,7 +147,9 @@ router.post('/upload', async (req, res) => {
         await s3.putObject(params).promise();
         res.json({ message: 'File uploaded successfully' });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
@@ -161,7 +172,9 @@ router.post('/buckets', async (req, res) => {
         await s3.createBucket(params).promise();
         res.json({ message: 'Bucket created successfully', bucket: { name: bucketName } });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        let status = await addMissingPermissionFromError(err.message);
+        console.error(err);
+        res.status(500).json({ error: err.message, status: status || 'error' });
     }
 });
 
