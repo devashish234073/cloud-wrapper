@@ -9,6 +9,8 @@ Thanks to the uniform error pattern that aws sdk throws that contains all teh de
 In this video you can see I start with just a single policy for the current user , which is iam related to listPolicy, createPolicy and attachPolicy.
 Other permissions are added by the application itself when the error occurs. 
 
+See the video in this post for more details:  https://www.linkedin.com/posts/devashish-priyadarshi-96554112b_made-the-cloud-wrapper-application-smarter-activity-7362159731911659520-fhQD?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB_v_B0B3953zoesstM-BJmeuZA94BtFpDI
+
 The only permission the user need now to begin with is :
 
 ```
