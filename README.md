@@ -9,6 +9,43 @@ Thanks to the uniform error pattern that aws sdk throws that contains all teh de
 In this video you can see I start with just a single policy for the current user , which is iam related to listPolicy, createPolicy and attachPolicy.
 Other permissions are added by the application itself when the error occurs. 
 
+The only permission the user need now to begin with is :
+
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sts:GetCallerIdentity"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:AttachUserPolicy",
+                "iam:CreatePolicy"
+            ],
+            "Resource": [
+                "arn:aws:iam::250324392423:user/s3readwrite",
+                "arn:aws:iam::250324392423:policy/Custom-*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iam:ListPolicies"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+Please ignore the managed permission and other permission details below as those were before this smartness was added.
+
 To start run
 
 ```
