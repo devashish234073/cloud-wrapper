@@ -1,5 +1,14 @@
 # cloud-wrapper
 
+## UPDATE 15th August 2025
+
+Made the cloud-wrapper application smarter! Earlier the application required all the iam permissions for the resources to be created and attached to the user with which you are logged in to your aws cli. Now that's no longer needed.
+Added a permissionFixer.js in the utils folder. That can create a policy and attach it to current user based on the error thrown when a particular operation is invoked. 
+
+Thanks to the uniform error pattern that aws sdk throws that contains all teh details needed for creating a policy. 
+In this video you can see I start with just a single policy for the current user , which is iam related to listPolicy, createPolicy and attachPolicy.
+Other permissions are added by the application itself when the error occurs. 
+
 To start run
 
 ```
