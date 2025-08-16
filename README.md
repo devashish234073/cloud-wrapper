@@ -12,6 +12,7 @@ Other permissions are added by the application itself when the error occurs.
 See the video in this post for more details:  https://www.linkedin.com/posts/devashish-priyadarshi-96554112b_made-the-cloud-wrapper-application-smarter-activity-7362159731911659520-fhQD?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB_v_B0B3953zoesstM-BJmeuZA94BtFpDI
 
 The only permission the user need now to begin with is :
+### Note: This permission should only be used and in this mode if you are sure you can keep your access key safe. As with "iam:AttachUserPolicy" and "iam:CreatePolicy", any unintended person having details of your access key will be able to access almost anything from your aws account. 
 
 ```
 {
