@@ -9,6 +9,7 @@ exports.addMissingPermissionFromError = async (errorMessage) => {
         const match = errorMessage.match(/is not authorized to perform: ([^ ]+):([^ ]+)/i);
         if (!match) {
             console.error("Could not parse permission from error message", errorMessage);
+            return;
         }
         console.log(`Adding missing permission for: ${match[0]}`);
 
