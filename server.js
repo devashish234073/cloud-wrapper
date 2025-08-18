@@ -34,7 +34,9 @@ app.get('/ui/ai', (req, res) => {
 app.get('/ui/compute', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'ui', 'compute.html'));
 });
-// Add this with other routes
+app.get('/ui/multi-ai', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'ui', 'multi-ai.html'));
+});
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'ui', 'home.html'));
 });

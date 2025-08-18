@@ -32,8 +32,9 @@ router.get('/models', async (req, res) => {
         const params = {
             byProvider: 'Amazon' // Can also filter by 'Anthropic', 'AI21', etc.
         };
-        
-        const data = await getBedrockClient().listFoundationModels(params).promise();
+
+        //const data = await getBedrockClient().listFoundationModels(params).promise();
+        const data = await getBedrockClient().listFoundationModels().promise();//not passing params to get all models
         res.json(data.modelSummaries);
     } catch (err) {
         let status = await addMissingPermissionFromError(err.message);
@@ -50,7 +51,7 @@ router.get('/models/:modelId', async (req, res) => {
         const params = {
             modelIdentifier: req.params.modelId
         };
-        
+
         const data = await getBedrockClient().getFoundationModel(params).promise();
         res.json(data.modelDetails);
     } catch (err) {
@@ -66,7 +67,7 @@ router.get('/models/:modelId', async (req, res) => {
 router.post('/invoke', async (req, res) => {
     try {
         const { modelId, prompt, temperature, topP } = req.body;
-        
+
         let requestBody;
         if (modelId.includes('anthropic')) {
             requestBody = JSON.stringify({
@@ -84,27 +85,37 @@ router.post('/invoke', async (req, res) => {
                     maxTokenCount: 300
                 }
             });
+        } else if (modelId.includes('mistral')) {
+            requestBody = JSON.stringify({
+                prompt: prompt,
+                max_tokens: 300,
+                temperature: temperature || 0.5,
+                top_p: topP || 0.9
+            });
+            contentType = 'application/json';
         } else {
-            throw new Error('Unsupported model type');
+            throw new Error('Unsupported model type' + modelId);
         }
-        
+
         const params = {
             modelId,
             body: requestBody,
             contentType: 'application/json',
             accept: 'application/json'
         };
-        
+
         const data = await getBedrockRuntimeClient().invokeModel(params).promise();
         const responseBody = JSON.parse(data.body.toString());
-        
+
         let result;
         if (modelId.includes('anthropic')) {
             result = responseBody.completion;
         } else if (modelId.includes('amazon')) {
             result = responseBody.results[0].outputText;
+        } else if (modelId.includes('mistral')) {
+            result = responseBody.outputs[0].text;
         }
-        
+
         res.json({ response: result });
     } catch (err) {
         let status = await addMissingPermissionFromError(err.message);
