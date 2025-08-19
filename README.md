@@ -1,5 +1,11 @@
 # cloud-wrapper
 
+## UPDATE 20th August 2025
+
+Added multi AI V2 with VR like experience
+
+<img width="1760" height="988" alt="image" src="https://github.com/user-attachments/assets/cdd52e72-4f9a-4d15-9256-69e4b8b4c80f" />
+
 ## UPDATE 18th August 2025
 
 Multi AI section added:
