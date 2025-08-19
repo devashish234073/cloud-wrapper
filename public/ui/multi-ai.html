@@ -21,12 +21,19 @@
             margin-bottom: 20px;
         }
 
-        .model-card {
-            background: white;
+        .model-card, .used-model-card {
             border-radius: 8px;
             padding: 15px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
             border: 1px solid #ddd;
+        }
+
+        .model-card {
+            background: white;
+        }
+
+        .used-model-card {
+            background: rgb(173, 190, 207);
         }
 
         .model-header {
@@ -152,6 +159,12 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             margin-bottom: 10px;
+        }
+
+        .model-info {
+            font-size: 0.6em;
+            color: #555;
+            margin: 5px 0;
         }
 
         .action-buttons {
@@ -280,7 +293,18 @@
 
             models.forEach(model => {
                 const modelCard = document.createElement('div');
-                modelCard.className = 'model-card';
+                let totalPrompts = 0;
+                let totalInputTokens = 0;
+                let totalOutputTokens = 0;
+                if(model.tokenUsage && model.tokenUsage.length > 0) {
+                   totalPrompts = model.tokenUsage.length;
+                   for(let i=0;i<model.tokenUsage.length;i++) {
+                        const usage = model.tokenUsage[i];
+                        totalInputTokens += usage.inputTokens || 0;
+                        totalOutputTokens += usage.outputTokens || 0;
+                    }
+                }
+                modelCard.className = totalPrompts==0?'model-card':'used-model-card';
                 modelCard.innerHTML = `
                     <div class="model-header">
                         <input type="checkbox" class="model-checkbox" id="model-${model.modelId}" 
@@ -288,6 +312,9 @@
                         <label for="model-${model.modelId}" class="model-name" title="${model.modelId}">${model.modelName}</label>
                     </div>
                     <p>Provider: ${model.providerName}</p>
+                    <p class="model-info">Total Prompts Sent: ${totalPrompts}</p>
+                    <p class="model-info">Input Token Sent: ${totalInputTokens}</p>
+                    <p class="model-info">Output Token Generated: ${totalOutputTokens}</p>
                     <div class="model-quantity">
                         <button class="quantity-btn minus" data-model="${model.modelId}">-</button>
                         <span class="quantity-value" data-model="${model.modelId}">1</span>
@@ -372,8 +399,16 @@
         // Build chat UI
         // Build chat UI
         function buildChatUI() {
-            if (selectedModels.length >= MAX_SELECTED) {
-                    e.target.checked = false;
+            console.log("selectedModels",selectedModels);
+            if (selectedModels.length == 0) {
+                    alert(`Please select at least one model`);
+                    return;
+            }
+            let modelQuantity = 0;
+            selectedModels.forEach(model => {
+                modelQuantity += model.quantity;
+            });
+            if (modelQuantity >= MAX_SELECTED) {
                     alert(`Maximum ${MAX_SELECTED} models can be selected`);
                     return;
             }
