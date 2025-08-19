@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR Multi AI Manager</title>
+    <!-- Tailwind CSS for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            /* Set font and ensure no overflow */
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #ui-overlay {
+            /* Use a glassmorphism effect */
+            backdrop-filter: blur(10px);
+            background: rgba(15, 23, 42, 0.8);
+        }
+
+        /* Custom scrollbar for text areas */
+        textarea::-webkit-scrollbar {
+            width: 8px;
+        }
+        textarea::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        textarea::-webkit-scrollbar-thumb {
+            background: #38bdf8;
+            border-radius: 10px;
+        }
+        textarea::-webkit-scrollbar-thumb:hover {
+            background: #0ea5e9;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+    <!-- Main container for the 3D scene -->
+    <div id="vr-container" class="relative w-full h-full">
+        <canvas id="three-canvas" class="block w-full h-full"></canvas>
+        
+        <!-- UI overlay for controls and status -->
+        <!--<div id="ui-overlay" class="absolute top-5 left-5 z-10 p-6 rounded-2xl shadow-xl border border-gray-700 max-w-sm w-11/12 transition-all duration-300">-->
+        <div id="ui-overlay" 
+     class="absolute top-5 left-5 z-10 p-6 rounded-2xl shadow-xl border border-gray-700 max-w-xs w-[280px] transition-all duration-300">
+            <h2 class="text-3xl font-bold text-sky-400 mb-4">VR Multi AI Manager</h2>
+            <div id="model-count" class="text-lg text-gray-400 mb-4">Selected Models: 0</div>
+            <button id="build-btn" class="btn build-btn w-full mb-4 px-6 py-3 rounded-lg font-bold text-lg shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Build VR Chat UI</button>
+            
+            <div id="prompt-section" class="hidden">
+                <h3 class="text-xl font-semibold mt-4 mb-2">Prompt</h3>
+                <textarea id="prompt-input" class="w-full h-24 p-3 rounded-lg border border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-400 resize-y focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all" placeholder="Enter your prompt for selected models..."></textarea>
+                <button id="send-btn" class="btn w-full mt-4 px-6 py-3 rounded-lg font-bold text-lg shadow-md transition-all duration-300 transform hover:scale-105">Send to Models</button>
+            </div>
+            
+            <div id="loader" class="loader w-8 h-8 mx-auto my-4 border-4 border-gray-600 border-t-sky-500 rounded-full animate-spin hidden"></div>
+            <div id="status" class="text-sm text-center text-gray-400 mt-4">Loading models...</div>
+        </div>
+        
+        <!-- Controls overlay -->
+        <div class="absolute bottom-5 left-5 z-10 p-4 rounded-2xl shadow-xl border border-gray-700 bg-gray-900 bg-opacity-80 backdrop-blur-sm">
+            <h4 class="font-bold text-gray-200 text-sm mb-2">Controls:</h4>
+            <div class="text-xs text-gray-400 space-y-1">
+                <p class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-sky-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg> Mouse: Look around</p>
+                <p class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-sky-400" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z"/></svg> Left Click: Select models</p>
+                <p class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-sky-400" viewBox="0 0 20 20" fill="currentColor"><path d="M11 5.4a2 2 0 01-2.2 0l-4 2a2 2 0 00-1.8 1.8l-2 4a2 2 0 000 2.2l2 4a2 2 0 001.8 1.8l4 2a2 2 0 002.2 0l4-2a2 2 0 001.8-1.8l2-4a2 2 0 000-2.2l-2-4a2 2 0 00-1.8-1.8l-4-2zM8 12.5a.5.5 0 001 0V8a.5.5 0 00-1 0v4.5zm4-4a.5.5 0 00-1 0V11a.5.5 0 001 0v-2.5z"/></svg> WASD: Move camera</p>
+                <p class="flex items-center"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-sky-400" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/><path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/></svg> Scroll: Zoom</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script for Three.js and custom logic -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Global variables for the Three.js scene and application state
+        let scene, camera, renderer;
+        let modelGroups = []; // Stores groups of a cube and its label for easy removal
+        let selectedModels = [];
+        let responseWindows = [];
+        let allModels = [];
+        let mouse = new THREE.Vector2();
+        let raycaster = new THREE.Raycaster();
+        let isBuilt = false;
+        
+        // Camera movement state
+        let moveForward = false, moveBackward = false;
+        let moveLeft = false, moveRight = false;
+        let velocity = new THREE.Vector3();
+        
+        /**
+         * Initializes the Three.js scene, camera, renderer, and lighting.
+         */
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+            
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+            
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            // Add some atmospheric lighting
+            const pointLight1 = new THREE.PointLight(0x3498db, 0.5, 50);
+            pointLight1.position.set(-10, 10, -10);
+            scene.add(pointLight1);
+            
+            const pointLight2 = new THREE.PointLight(0xe74c3c, 0.3, 30);
+            pointLight2.position.set(10, 5, 10);
+            scene.add(pointLight2);
+            
+            // Add floor
+            const floorGeometry = new THREE.PlaneGeometry(50, 50);
+            const floorMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x222222,
+                transparent: true,
+                opacity: 0.8
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.y = -2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            
+            // Setup event listeners for user interaction
+            setupEventListeners();
+            
+            // Start the animation loop
+            animate();
+            
+            // Load and display the initial AI models
+            loadModels();
+        }
+        
+        /**
+         * Sets up all the event listeners for mouse, keyboard, and UI buttons.
+         */
+        function setupEventListeners() {
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('click', onMouseClick);
+            window.addEventListener('resize', onWindowResize);
+            window.addEventListener('wheel', onMouseWheel); // Add mouse wheel for zoom
+            
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            
+            document.getElementById('build-btn').addEventListener('click', buildVRChatUI);
+            document.getElementById('send-btn').addEventListener('click', sendPrompt);
+        }
+
+        /**
+         * Handles mouse movement for camera rotation.
+         * @param {MouseEvent} event
+         */
+        function onMouseMove(event) {
+            // Update the mouse position for raycasting
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Simple camera rotation with left mouse button
+            if (event.buttons === 1) {
+                camera.rotation.y -= event.movementX * 0.002;
+                camera.rotation.x -= event.movementY * 0.002;
+                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+            }
+        }
+
+        /**
+         * Handles mouse wheel events for camera zoom.
+         * @param {WheelEvent} event
+         */
+        function onMouseWheel(event) {
+            // Adjust camera position based on scroll direction
+            camera.position.z += event.deltaY * 0.005;
+        }
+        
+        /**
+         * Handles mouse click events to select/deselect AI models.
+         * @param {MouseEvent} event
+         */
+        function onMouseClick(event) {
+            // Disable selection after the VR UI has been built
+            if (isBuilt) return;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(modelGroups.map(group => group.children[0])); // Only check the cubes
+            
+            if (intersects.length > 0) {
+                const selectedCube = intersects[0].object;
+                toggleModelSelection(selectedCube);
+            }
+        }
+        
+        /**
+         * Handles keyboard key presses for camera movement.
+         * @param {KeyboardEvent} event
+         */
+        function onKeyDown(event) {
+            switch(event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyD': moveRight = true; break;
+            }
+        }
+        
+        /**
+         * Handles keyboard key releases to stop camera movement.
+         * @param {KeyboardEvent} event
+         */
+        function onKeyUp(event) {
+            switch(event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+        }
+        
+        /**
+         * Adjusts the camera and renderer when the window is resized.
+         */
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        /**
+         * Updates the camera position based on keyboard input.
+         */
+        function updateCamera() {
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+
+            if (moveForward) {
+                camera.position.addScaledVector(direction, 0.1);
+            }
+            if (moveBackward) {
+                camera.position.addScaledVector(direction, -0.1);
+            }
+            if (moveLeft) {
+                const left = new THREE.Vector3().crossVectors(direction, camera.up);
+                camera.position.addScaledVector(left, -0.1);
+            }
+            if (moveRight) {
+                const right = new THREE.Vector3().crossVectors(direction, camera.up);
+                camera.position.addScaledVector(right, 0.1);
+            }
+        }
+        
+        /**
+         * Simulates an API call to load AI models or falls back to mock data.
+         */
+        async function loadModels() {
+            document.getElementById('status').textContent = 'Loading models...';
+            document.getElementById('loader').classList.remove('hidden');
+            
+            try {
+                // Simulate fetching from an API. Will fall back to mock data if the API is not available.
+                const response = await fetch('/api/ai/models');
+                if (!response.ok) {
+                    allModels = generateMockModels();
+                } else {
+                    allModels = await response.json();
+                }
+                
+                createModelCubes();
+                document.getElementById('status').textContent = `Loaded ${allModels.length} models. Click to select!`;
+            } catch (error) {
+                console.error('Error loading models:', error);
+                allModels = generateMockModels();
+                createModelCubes();
+                document.getElementById('status').textContent = `Demo mode: ${allModels.length} mock models loaded`;
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+                document.getElementById('build-btn').disabled = false;
+            }
+        }
+        
+        /**
+         * Generates mock data for AI models for demonstration purposes.
+         */
+        function generateMockModels() {
+            const providers = ['Gemini', 'Anthropic', 'AI21', 'Cohere', 'Meta'];
+            const models = [];
+            
+            for (let i = 0; i < 12; i++) {
+                models.push({
+                    modelId: `model-${i + 1}`,
+                    modelName: `AI Model ${i + 1}`,
+                    providerName: providers[i % providers.length],
+                });
+            }
+            return models;
+        }
+        
+        /**
+         * Creates the 3D cube representations for each AI model.
+         */
+        function createModelCubes() {
+            const gridSize = Math.ceil(Math.sqrt(allModels.length));
+            const spacing = 3;
+            
+            [...allModels].reverse().forEach((model, index) => {
+                const row = Math.floor(index / gridSize);
+                const col = index % gridSize;
+                
+                // Create a group to hold the cube and its label
+                const group = new THREE.Group();
+                group.position.set(
+                    (col - gridSize/2 + 0.5) * spacing,
+                    2,
+                    (row - gridSize/2 + 0.5) * spacing
+                );
+                
+                // Create cube geometry
+                const geometry = new THREE.BoxGeometry(0.2, 1.5, 1.5);
+                const material = new THREE.MeshPhongMaterial({ 
+                    color: 0x3498db,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                
+                const cube = new THREE.Mesh(geometry, material);
+                cube.castShadow = true;
+                cube.userData = { model, selected: false, index };
+                group.add(cube); // Add cube to the group
+                
+                // Create text label
+                const textGeometry = new THREE.PlaneGeometry(2, 0.7);
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 64;
+                const context = canvas.getContext('2d');
+                context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                context.fillRect(0, 0, 256, 64);
+                context.fillStyle = 'white';
+                context.font = '26px Arial';
+                context.textAlign = 'center';
+                context.fillText(model.modelName, 128, 32);
+                context.font = '16px Arial';
+                context.fillText(model.providerName, 128, 48);
+                
+                const textTexture = new THREE.CanvasTexture(canvas);
+                const textMaterial = new THREE.MeshBasicMaterial({ 
+                    map: textTexture, 
+                    transparent: true 
+                });
+                const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+                textMesh.position.y += 1.5;
+                textMesh.lookAt(camera.position);
+                group.add(textMesh); // Add text to the group
+                
+                scene.add(group);
+                modelGroups.push(group);
+            });
+        }
+        
+        /**
+         * Toggles the selection state of a 3D model cube.
+         * @param {THREE.Mesh} cube The cube mesh that was clicked.
+         */
+        function toggleModelSelection(cube) {
+            const model = cube.userData.model;
+            const isSelected = cube.userData.selected;
+            
+            // Changed the max selection limit to 3
+            if (isSelected) {
+                cube.material.color.setHex(0x3498db); // Deselect color
+                cube.userData.selected = false;
+                selectedModels = selectedModels.filter(m => m.modelId !== model.modelId);
+            } else {
+                if (selectedModels.length >= 3) {
+                    document.getElementById('status').textContent = 'Maximum 3 models can be selected';
+                    return;
+                }
+                cube.material.color.setHex(0xe74c3c); // Select color
+                cube.userData.selected = true;
+                selectedModels.push(model);
+            }
+            
+            updateUI();
+        }
+        
+        /**
+         * Updates the UI elements based on the current selection state.
+         */
+        function updateUI() {
+            document.getElementById('model-count').textContent = `Selected Models: ${selectedModels.length}`;
+            document.getElementById('build-btn').disabled = selectedModels.length === 0;
+        }
+
+        /**
+         * Clears all 3D model cubes from the scene.
+         */
+        function clearModelCubes() {
+            modelGroups.forEach(group => {
+                // Recursively dispose of geometries and materials to prevent memory leaks
+                group.traverse(object => {
+                    if (object.isMesh) {
+                        object.geometry.dispose();
+                        object.material.dispose();
+                    }
+                });
+                scene.remove(group);
+            });
+            modelGroups = []; // Reset the array
+        }
+        
+        /**
+         * Builds the VR chat UI by clearing old models and creating new response windows.
+         */
+        function buildVRChatUI() {
+            if (selectedModels.length === 0) return;
+            
+            isBuilt = true;
+            
+            // Remove all existing model cubes
+            clearModelCubes();
+            
+            // Hide the build button and show the prompt section
+            document.getElementById('build-btn').classList.add('hidden');
+            document.getElementById('prompt-section').classList.remove('hidden');
+            document.getElementById('status').textContent = 'VR Chat UI built! Enter your prompt below.';
+            
+            // Create response windows in 3D space
+            createResponseWindows();
+        }
+        
+        /**
+         * Creates the 3D chat windows for each selected AI model.
+         */
+        function createResponseWindows() {
+            const windowWidth = 12;
+            const windowHeight = 9;
+            const spacing = 10;
+            
+            selectedModels.forEach((model, index) => {
+                // Create window geometry
+                const windowGeometry = new THREE.PlaneGeometry(windowWidth, windowHeight);
+                const windowMaterial = new THREE.MeshPhongMaterial({ 
+                    color: 0x2c3e50,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide
+                });
+                
+                const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
+                windowMesh.position.set(
+                    (index - (selectedModels.length - 1)/2) * spacing,
+                    3,
+                    -5
+                );
+                
+                // Create text canvas for responses
+                // Increased canvas resolution for better text clarity
+                const canvas = document.createElement('canvas');
+                canvas.width = 1024;
+                canvas.height = 768;
+                const context = canvas.getContext('2d');
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                windowMesh.material.map = texture;
+                windowMesh.userData = { model, canvas, context, texture };
+                
+                scene.add(windowMesh);
+                responseWindows.push(windowMesh);
+
+                updateResponseWindow(windowMesh, '', 'Ready for prompts...');
+            });
+        }
+        
+        /**
+         * Sends the user's prompt to the selected models via the new API endpoint.
+         */
+        async function sendPrompt() {
+            const prompt = document.getElementById('prompt-input').value.trim();
+            if (!prompt) {
+                document.getElementById('status').textContent = 'Please enter a prompt';
+                return;
+            }
+            
+            document.getElementById('status').textContent = 'Sending prompts...';
+            document.getElementById('loader').classList.remove('hidden');
+            
+            // Clear previous responses and show a loading state
+            responseWindows.forEach(window => {
+                updateResponseWindow(window, prompt, 'Processing...');
+            });
+
+            const promises = selectedModels.map(model => {
+                return fetch('/api/ai/invoke', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        modelId: model.modelId,
+                        prompt: prompt
+                    })
+                }).then(response => response.json())
+                    .then(result => ({
+                        ...result,
+                        modelId: model.modelId
+                    }));
+            });
+            
+            try {
+                const results = await Promise.all(promises);
+                
+                // Update response windows with the actual results
+                results.forEach((result) => {
+                    const windowToUpdate = responseWindows.find(window => window.userData.model.modelId === result.modelId);
+                    if (windowToUpdate) {
+                        // Assuming the API response has a 'response' field with the text
+                        const responseText = result.response || `No response field found from model ${result.modelId}`;
+                        updateResponseWindow(windowToUpdate, prompt, responseText);
+                    }
+                });
+                
+                document.getElementById('status').textContent = 'Responses received!';
+            } catch (error) {
+                console.error('Error sending prompts:', error);
+                document.getElementById('status').textContent = 'Error sending prompts';
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+            }
+        }
+        
+        /**
+         * Updates the content of a 3D response window using a 2D canvas.
+         * @param {THREE.Mesh} window The 3D window mesh.
+         * @param {string} prompt The original user prompt.
+         * @param {string} response The AI response text.
+         */
+        function updateResponseWindow(window, prompt, response) {
+            const { context, texture, model, canvas } = window.userData;
+            
+            // Clear canvas
+            context.fillStyle = 'rgba(44, 62, 80, 0.95)';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Header
+            context.fillStyle = '#38bdf8';
+            context.fillRect(0, 0, canvas.width, 100);
+            context.fillStyle = 'white';
+            context.font = 'bold 48px Arial';
+            context.textAlign = 'center';
+            context.fillText(model.modelName, canvas.width / 2, 65);
+            
+            // Content
+            const padding = 40;
+            const contentWidth = canvas.width - 2 * padding;
+            let currentY = 140;
+            const lineHeight = 30;
+
+            context.textAlign = 'left';
+            
+            // Draw prompt
+            context.font = 'bold 24px Arial';
+            context.fillStyle = '#cbd5e1';
+            context.fillText('Prompt:', padding, currentY);
+            currentY += lineHeight;
+            context.font = '24px Arial';
+            wrapText(context, prompt, padding, currentY, contentWidth, lineHeight);
+            
+            // Calculate y position for the response based on prompt height
+            const promptLines = Math.ceil(context.measureText(prompt).width / contentWidth);
+            currentY += Math.max(promptLines, 1) * lineHeight + 40;
+
+            // Draw response
+            context.font = 'bold 24px Arial';
+            context.fillStyle = '#4ade80';
+            context.fillText('Response:', padding, currentY);
+            currentY += lineHeight;
+            context.font = '24px Arial';
+            context.fillStyle = 'white';
+            wrapText(context, response, padding, currentY, contentWidth, lineHeight);
+            
+            texture.needsUpdate = true;
+        }
+        
+        /**
+         * Wraps text to fit within a specific width on a canvas.
+         */
+        function wrapText(context, text, x, y, maxWidth, lineHeight) {
+            if (!text) return;
+            const words = text.split(' ');
+            let line = '';
+            let currentY = y;
+            
+            for (let n = 0; n < words.length; n++) {
+                const testLine = line + words[n] + ' ';
+                const metrics = context.measureText(testLine);
+                const testWidth = metrics.width;
+                
+                if (testWidth > maxWidth && n > 0) {
+                    context.fillText(line, x, currentY);
+                    line = words[n] + ' ';
+                    currentY += lineHeight;
+                } else {
+                    line = testLine;
+                }
+            }
+            context.fillText(line, x, currentY);
+        }
+        
+        /**
+         * The main animation loop for the Three.js scene.
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            updateCamera();
+            
+            // Rotate the initial model cubes slightly
+            modelGroups.forEach(group => {
+                group.rotation.y += 0.005;
+                group.rotation.x += 0.002;
+            });
+            
+            // Make response windows always face the camera
+            responseWindows.forEach(window => {
+                window.lookAt(camera.position);
+            });
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Start the application when the window loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

@@ -37,6 +37,9 @@ app.get('/ui/compute', (req, res) => {
 app.get('/ui/multi-ai', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'ui', 'multi-ai.html'));
 });
+app.get('/ui/multi-ai-v2', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'ui', 'multi-ai-v2.html'));
+});
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'ui', 'home.html'));
 });
