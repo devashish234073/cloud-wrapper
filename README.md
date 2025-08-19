@@ -1,5 +1,16 @@
 # cloud-wrapper
 
+## UPDATE 18th August 2025
+
+Multi AI section added:
+
+<img width="1267" height="475" alt="image" src="https://github.com/user-attachments/assets/498170d4-acf6-4395-bc21-db90e356e3f1" />
+
+Let's you choose multiple models or multiple instances of same model and interact will then with the same prompt.
+
+<img width="1270" height="788" alt="image" src="https://github.com/user-attachments/assets/f68e8cb1-bb13-4fd5-99a2-502a3cb8be26" />
+
+
 ## UPDATE 15th August 2025
 
 Made the cloud-wrapper application smarter! Earlier the application required all the iam permissions for the resources to be created and attached to the user with which you are logged in to your aws cli. Now that's no longer needed.
