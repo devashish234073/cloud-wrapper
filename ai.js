@@ -49,7 +49,11 @@ router.get('/models', async (req, res) => {
             }
         }
         data.modelSummaries.sort((a, b) => b.tokenUsage.length - a.tokenUsage.length);
-        res.json(data.modelSummaries);
+        if(req.query.maxToShow) {
+            res.json(data.modelSummaries.slice(0, parseInt(req.query.maxToShow)));
+        } else {
+            res.json(data.modelSummaries);
+        }
     } catch (err) {
         let status = await addMissingPermissionFromError(err.message);
         console.error(err);
@@ -107,6 +111,12 @@ router.post('/invoke', async (req, res) => {
                 top_p: topP || 0.9
             });
             contentType = 'application/json';
+        } else if (modelId.includes('llama')) {
+            requestBody = JSON.stringify({
+                prompt: prompt,
+                temperature: temperature || 0.5,
+                top_p: topP || 0.9
+            });
         } else {
             throw new Error('Unsupported model type' + modelId);
         }
@@ -128,6 +138,8 @@ router.post('/invoke', async (req, res) => {
             result = responseBody.results[0].outputText;
         } else if (modelId.includes('mistral')) {
             result = responseBody.outputs[0].text;
+        } else if (modelId.includes('llama')) {
+            result = responseBody.generation;
         }
 
         const tokenUsage = extractTokenUsage(prompt, responseBody, modelId);
@@ -223,6 +235,24 @@ function extractTokenUsage(inputPrompt, responseBody, modelId) {
                 tokenUsage.inputTokens = responseBody.meta.billed_units.input_tokens;
                 tokenUsage.outputTokens = responseBody.meta.billed_units.output_tokens;
                 tokenUsage.totalTokens = (responseBody.meta.billed_units.input_tokens || 0) + (responseBody.meta.billed_units.output_tokens || 0);
+            }
+        } else if (modelId.includes('llama')) {
+            // Meta Llama models
+            if (responseBody.prompt_token_count !== undefined) {
+                tokenUsage.inputTokens = responseBody.prompt_token_count;
+            }
+            if (responseBody.generation_token_count !== undefined) {
+                tokenUsage.outputTokens = responseBody.generation_token_count;
+            }
+            if (tokenUsage.inputTokens !== null && tokenUsage.outputTokens !== null) {
+                tokenUsage.totalTokens = tokenUsage.inputTokens + tokenUsage.outputTokens;
+            } else if (responseBody.prompt_token_count === undefined && responseBody.generation_token_count === undefined) {
+                // Estimate tokens if not provided
+                const outputText = responseBody.generation || '';
+                tokenUsage.inputTokens = estimateTokens(inputPrompt);
+                tokenUsage.outputTokens = estimateTokens(outputText);
+                tokenUsage.totalTokens = tokenUsage.inputTokens + tokenUsage.outputTokens;
+                tokenUsage.estimatedUsage = true;
             }
         }
     } catch (error) {

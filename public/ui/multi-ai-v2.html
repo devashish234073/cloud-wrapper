@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Multi AI Manager</title>
+    <title>AI Verse</title>
     <!-- Tailwind CSS for modern styling -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -13,6 +13,24 @@
             overflow: hidden;
             height: 100vh;
             width: 100vw;
+            cursor: none; /* Hide default cursor */
+        }
+
+        #custom-cursor {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(56,189,248,0.4) 70%, transparent 71%);
+            pointer-events: none;
+            z-index: 9999;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 15px 5px rgba(56, 189, 248, 0.6);
+            display: none;
+        }
+
+        .build-btn, #send-btn {
+            border: 1px solid #38bdf8;
         }
 
         #ui-overlay {
@@ -36,29 +54,40 @@
         textarea::-webkit-scrollbar-thumb:hover {
             background: #0ea5e9;
         }
+
+        /* Loader animation */
+        .loader {
+            border-top-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100">
+    <!-- Custom cursor element -->
+    <div id="custom-cursor"></div>
+    
     <!-- Main container for the 3D scene -->
     <div id="vr-container" class="relative w-full h-full">
         <canvas id="three-canvas" class="block w-full h-full"></canvas>
         
         <!-- UI overlay for controls and status -->
-        <!--<div id="ui-overlay" class="absolute top-5 left-5 z-10 p-6 rounded-2xl shadow-xl border border-gray-700 max-w-sm w-11/12 transition-all duration-300">-->
         <div id="ui-overlay" 
-     class="absolute top-5 left-5 z-10 p-6 rounded-2xl shadow-xl border border-gray-700 max-w-xs w-[280px] transition-all duration-300">
-            <h2 class="text-3xl font-bold text-sky-400 mb-4">VR Multi AI Manager</h2>
-            <div id="model-count" class="text-lg text-gray-400 mb-4">Selected Models: 0</div>
-            <button id="build-btn" class="btn build-btn w-full mb-4 px-6 py-3 rounded-lg font-bold text-lg shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Build VR Chat UI</button>
+      class="absolute top-5 left-5 z-10 p-6 rounded-2xl shadow-xl border border-gray-700 max-w-xs w-[280px] transition-all duration-300">
+            <h3 class="text-2xl font-bold text-sky-400 mb-4">AI Verse</h3>
+            <div id="model-count" class="text-xs text-gray-400 mb-4">Selected Models: 0</div>
+            <button id="build-btn" class="btn build-btn w-full mb-4 px-6 py-3 rounded-lg font-bold text-sm shadow-md transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed">Build VR Chat UI</button>
             
             <div id="prompt-section" class="hidden">
-                <h3 class="text-xl font-semibold mt-4 mb-2">Prompt</h3>
                 <textarea id="prompt-input" class="w-full h-24 p-3 rounded-lg border border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-400 resize-y focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all" placeholder="Enter your prompt for selected models..."></textarea>
-                <button id="send-btn" class="btn w-full mt-4 px-6 py-3 rounded-lg font-bold text-lg shadow-md transition-all duration-300 transform hover:scale-105">Send to Models</button>
+                <button id="send-btn" class="btn w-full mt-4 px-6 py-3 rounded-lg font-bold text-sm shadow-md transition-all duration-300 transform hover:scale-105">Send to Models</button>
             </div>
             
             <div id="loader" class="loader w-8 h-8 mx-auto my-4 border-4 border-gray-600 border-t-sky-500 rounded-full animate-spin hidden"></div>
-            <div id="status" class="text-sm text-center text-gray-400 mt-4">Loading models...</div>
+            <div id="status" class="text-xs text-center text-gray-400 mt-4">Loading models...</div>
         </div>
         
         <!-- Controls overlay -->
@@ -85,6 +114,9 @@
         let mouse = new THREE.Vector2();
         let raycaster = new THREE.Raycaster();
         let isBuilt = false;
+        let highlightLight; // New variable for the single, dynamic light
+        let torchLight; // New variable for the mouse torch light
+        let cursorVisible = false;
         
         // Camera movement state
         let moveForward = false, moveBackward = false;
@@ -109,25 +141,27 @@
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+            // Reverted to a single AmbientLight for general scene illumination
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.2); // Reduced ambient light
             scene.add(ambientLight);
+
+            // New: create a single point light that will be moved to highlight cards
+            highlightLight = new THREE.PointLight(0xffffff, 1, 50);
+            highlightLight.position.set(0, 5, -5); // Default position
+            scene.add(highlightLight);
             
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(10, 10, 5);
-            directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 2048;
-            directionalLight.shadow.mapSize.height = 2048;
-            scene.add(directionalLight);
+            // Create the mouse torch light
+            torchLight = new THREE.SpotLight(0xffffff, 3, 20, Math.PI/6, 0.5, 1);
+            torchLight.position.set(0, 0, 5);
+            torchLight.castShadow = true;
+            torchLight.shadow.mapSize.width = 1024;
+            torchLight.shadow.mapSize.height = 1024;
+            scene.add(torchLight);
             
-            // Add some atmospheric lighting
-            const pointLight1 = new THREE.PointLight(0x3498db, 0.5, 50);
-            pointLight1.position.set(-10, 10, -10);
-            scene.add(pointLight1);
-            
-            const pointLight2 = new THREE.PointLight(0xe74c3c, 0.3, 30);
-            pointLight2.position.set(10, 5, 10);
-            scene.add(pointLight2);
+            // Add light target
+            const lightTarget = new THREE.Object3D();
+            scene.add(lightTarget);
+            torchLight.target = lightTarget;
             
             // Add floor
             const floorGeometry = new THREE.PlaneGeometry(50, 50);
@@ -144,6 +178,10 @@
             
             // Setup event listeners for user interaction
             setupEventListeners();
+            
+            // Show custom cursor
+            document.getElementById('custom-cursor').style.display = 'block';
+            cursorVisible = true;
             
             // Start the animation loop
             animate();
@@ -169,7 +207,7 @@
         }
 
         /**
-         * Handles mouse movement for camera rotation.
+         * Handles mouse movement for camera rotation and object highlighting.
          * @param {MouseEvent} event
          */
         function onMouseMove(event) {
@@ -177,12 +215,39 @@
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             
+            // Update custom cursor position
+            const cursor = document.getElementById('custom-cursor');
+            cursor.style.left = `${event.clientX}px`;
+            cursor.style.top = `${event.clientY}px`;
+            
             // Simple camera rotation with left mouse button
             if (event.buttons === 1) {
                 camera.rotation.y -= event.movementX * 0.002;
                 camera.rotation.x -= event.movementY * 0.002;
                 camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
             }
+
+            // Update torch light to follow mouse position
+            updateTorchLight();
+        }
+
+        /**
+         * Updates the torch light to follow the mouse pointer
+         */
+        function updateTorchLight() {
+            // Position the torch light at the camera
+            torchLight.position.copy(camera.position);
+            
+            // Calculate where the mouse is pointing in 3D space
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Create a plane at z=0 to intersect with
+            const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+            const intersectPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, intersectPoint);
+            
+            // Point the light toward the intersection point
+            torchLight.target.position.copy(intersectPoint);
         }
 
         /**
@@ -278,7 +343,7 @@
             
             try {
                 // Simulate fetching from an API. Will fall back to mock data if the API is not available.
-                const response = await fetch('/api/ai/models');
+                const response = await fetch('/api/ai/models?maxToShow=20');
                 if (!response.ok) {
                     allModels = generateMockModels();
                 } else {
@@ -321,7 +386,6 @@
         function createModelCubes() {
             const gridSize = Math.ceil(Math.sqrt(allModels.length));
             const spacing = 3;
-            
             [...allModels].reverse().forEach((model, index) => {
                 const row = Math.floor(index / gridSize);
                 const col = index % gridSize;
@@ -334,9 +398,15 @@
                     (row - gridSize/2 + 0.5) * spacing
                 );
                 
-                // Create cube geometry
-                const geometry = new THREE.BoxGeometry(0.2, 1.5, 1.5);
-                const material = new THREE.MeshPhongMaterial({ 
+                // Donut geometry
+                const geometry = new THREE.TorusGeometry(
+                    0.7,   // radius (overall size of donut)
+                    0.10,  // tube (thickness of the donut ring)
+                    16,    // radialSegments (smoothness around tube)
+                    100    // tubularSegments (smoothness around circle)
+                );
+
+                const material = new THREE.MeshPhongMaterial({
                     color: 0x3498db,
                     transparent: true,
                     opacity: 0.8
@@ -346,6 +416,7 @@
                 cube.castShadow = true;
                 cube.userData = { model, selected: false, index };
                 group.add(cube); // Add cube to the group
+                cube.position.y += 2; // Raise the cube above the ground
                 
                 // Create text label
                 const textGeometry = new THREE.PlaneGeometry(2, 0.7);
@@ -353,10 +424,10 @@
                 canvas.width = 256;
                 canvas.height = 64;
                 const context = canvas.getContext('2d');
-                context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                context.fillStyle = 'rgba(0, 0, 0, 0.2)';
                 context.fillRect(0, 0, 256, 64);
-                context.fillStyle = 'white';
-                context.font = '26px Arial';
+                context.fillStyle = '#ffffff';
+                context.font = '16px Arial';
                 context.textAlign = 'center';
                 context.fillText(model.modelName, 128, 32);
                 context.font = '16px Arial';
@@ -368,7 +439,7 @@
                     transparent: true 
                 });
                 const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-                textMesh.position.y += 1.5;
+                textMesh.position.y += 3.5;
                 textMesh.lookAt(camera.position);
                 group.add(textMesh); // Add text to the group
                 
@@ -438,11 +509,14 @@
             
             // Remove all existing model cubes
             clearModelCubes();
+
+            // Set the highlight light to an invisible position
+            highlightLight.position.set(0, 100, 0);
             
             // Hide the build button and show the prompt section
             document.getElementById('build-btn').classList.add('hidden');
             document.getElementById('prompt-section').classList.remove('hidden');
-            document.getElementById('status').textContent = 'VR Chat UI built! Enter your prompt below.';
+            document.getElementById('status').textContent = 'VR Chat UI built! Enter your prompt above.';
             
             // Create response windows in 3D space
             createResponseWindows();
@@ -454,9 +528,15 @@
         function createResponseWindows() {
             const windowWidth = 12;
             const windowHeight = 9;
-            const spacing = 10;
+            const spacing = 12;
             
             selectedModels.forEach((model, index) => {
+                // Create a group for the window
+                const group = new THREE.Group();
+                let position = [(index - (selectedModels.length - 1)/2) * spacing, 3,-5];
+                console.log("position",position);
+                group.position.set(...position);
+                
                 // Create window geometry
                 const windowGeometry = new THREE.PlaneGeometry(windowWidth, windowHeight);
                 const windowMaterial = new THREE.MeshPhongMaterial({ 
@@ -467,11 +547,7 @@
                 });
                 
                 const windowMesh = new THREE.Mesh(windowGeometry, windowMaterial);
-                windowMesh.position.set(
-                    (index - (selectedModels.length - 1)/2) * spacing,
-                    3,
-                    -5
-                );
+                group.add(windowMesh);
                 
                 // Create text canvas for responses
                 // Increased canvas resolution for better text clarity
@@ -484,7 +560,7 @@
                 windowMesh.material.map = texture;
                 windowMesh.userData = { model, canvas, context, texture };
                 
-                scene.add(windowMesh);
+                scene.add(group);
                 responseWindows.push(windowMesh);
 
                 updateResponseWindow(windowMesh, '', 'Ready for prompts...');
@@ -509,6 +585,7 @@
                 updateResponseWindow(window, prompt, 'Processing...');
             });
 
+            // Use Promise.all to handle all API calls concurrently
             const promises = selectedModels.map(model => {
                 return fetch('/api/ai/invoke', {
                     method: 'POST',
@@ -538,6 +615,10 @@
                 });
                 
                 document.getElementById('status').textContent = 'Responses received!';
+                document.querySelector('#ui-overlay').style.display = 'none';
+                setTimeout(() => {
+                    document.querySelector('#ui-overlay').style.display = 'block';
+                }, 6000); // Briefly hide to force texture update
             } catch (error) {
                 console.error('Error sending prompts:', error);
                 document.getElementById('status').textContent = 'Error sending prompts';
@@ -627,6 +708,10 @@
         /**
          * The main animation loop for the Three.js scene.
          */
+        direction = 1; // Direction for rotation
+        setInterval(() => {
+            direction *= -1; // Reverse direction every 5 seconds
+        }, 5000);
         function animate() {
             requestAnimationFrame(animate);
             
@@ -634,14 +719,17 @@
             
             // Rotate the initial model cubes slightly
             modelGroups.forEach(group => {
-                group.rotation.y += 0.005;
-                group.rotation.x += 0.002;
+                group.rotation.y += (direction) * 0.002;
+                group.rotation.x += (direction) * 0.002;
             });
             
             // Make response windows always face the camera
             responseWindows.forEach(window => {
-                window.lookAt(camera.position);
+                window.parent.lookAt(camera.position); // Look at the parent group, which contains the window and light
             });
+            
+            // Update torch light to follow mouse
+            updateTorchLight();
             
             renderer.render(scene, camera);
         }
