@@ -1,5 +1,10 @@
 # cloud-wrapper
 
+## UPDATE 21st August 2025
+
+Changed the cuboids into donut shapes and light source now moves with the mouse. See details here: https://www.linkedin.com/feed/update/urn:li:activity:7364117387547217922/
+<img width="1919" height="961" alt="image" src="https://github.com/user-attachments/assets/b8f4071e-7e13-48d6-b547-5797779c05ec" />
+
 ## UPDATE 20th August 2025
 
 Added multi AI V2 with VR like experience
