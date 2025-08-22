@@ -1,9 +1,83 @@
 # cloud-wrapper
 
+To run (make sure you have aws cli installed and setup with an aws accout locally with the IAM permission, see IAM Section below for more details):
+
+```
+git clone https://github.com/devashish234073/cloud-wrapper
+cd cloud-wrapper
+npm install
+npm start
+```
+
 ## UPDATE 21st August 2025
 
 Changed the cuboids into donut shapes and light source now moves with the mouse. See details here: https://www.linkedin.com/feed/update/urn:li:activity:7364117387547217922/
 <img width="1919" height="961" alt="image" src="https://github.com/user-attachments/assets/b8f4071e-7e13-48d6-b547-5797779c05ec" />
+
+A simple html to create the highlight effect can be achieved through:
+
+```
+<body>
+    <canvas id="three-canvas"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, plane;
+        let torchLight;
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111111);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
+            
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            
+            torchLight = new THREE.SpotLight(0xffffff, 3, 20, Math.PI/6, 0.5, 1);
+            torchLight.position.set(0, 0, 5);
+            scene.add(torchLight);
+            
+            createObjects();
+            
+            window.addEventListener('mousemove', onMouseMove);
+            animate();
+        }
+        
+        function createObjects() {
+            const material = new THREE.MeshLambertMaterial({ 
+                    color: 0x3498db,
+                    transparent: true,
+                    opacity: 0.8
+            });
+            const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+            box.position.set(-2,0,0);
+            scene.add(box);
+            const torus = new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.2, 16, 100), material);
+            torus.position.set(2,0,0);
+            scene.add(torus);
+            plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        }
+        function onMouseMove(event) {
+            let x = (event.clientX / window.innerWidth) * 2 - 1;
+            let y = -(event.clientY / window.innerHeight) * 2 + 1;
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera({x,y}, camera);
+            const intersectPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, intersectPoint);
+            torchLight.position.set(intersectPoint.x, 5, intersectPoint.z);
+            torchLight.target.position.copy(intersectPoint);
+            scene.add(torchLight.target);
+        }
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        window.addEventListener('load', init);
+    </script>
+</body>
+```
 
 ## UPDATE 20th August 2025
 
@@ -32,6 +106,8 @@ In this video you can see I start with just a single policy for the current user
 Other permissions are added by the application itself when the error occurs. 
 
 See the video in this post for more details:  https://www.linkedin.com/posts/devashish-priyadarshi-96554112b_made-the-cloud-wrapper-application-smarter-activity-7362159731911659520-fhQD?utm_source=share&utm_medium=member_desktop&rcm=ACoAAB_v_B0B3953zoesstM-BJmeuZA94BtFpDI
+
+## IAM Section
 
 The only permission the user need now to begin with is :
 ### Note: This permission should only be used and in this mode if you are sure you can keep your access key safe. As with "iam:AttachUserPolicy" and "iam:CreatePolicy", any unintended person having details of your access key will be able to access almost anything from your aws account. 
