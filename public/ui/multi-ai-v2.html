@@ -61,6 +61,10 @@
             animation: spin 1s linear infinite;
         }
 
+        #videoSection {
+            margin-top: 10px;;
+        }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -85,6 +89,11 @@
                 <textarea id="prompt-input" class="w-full h-24 p-3 rounded-lg border border-gray-600 bg-gray-800 text-gray-100 placeholder-gray-400 resize-y focus:outline-none focus:ring-2 focus:ring-sky-500 transition-all" placeholder="Enter your prompt for selected models..."></textarea>
                 <button id="send-btn" class="btn w-full mt-4 px-6 py-3 rounded-lg font-bold text-sm shadow-md transition-all duration-300 transform hover:scale-105">Send to Models</button>
             </div>
+
+            <div id="videoSection" style="display:none">
+                Infer Frame:<input type="checkbox" id="inferChk" disabled><input type="file" id="videoUpload" accept="video/*"/>
+                <video id="video" style="display:none" autoplay loop playsinline></video>
+            </div>
             
             <div id="loader" class="loader w-8 h-8 mx-auto my-4 border-4 border-gray-600 border-t-sky-500 rounded-full animate-spin hidden"></div>
             <div id="status" class="text-xs text-center text-gray-400 mt-4">Loading models...</div>
@@ -104,6 +113,8 @@
 
     <!-- Script for Three.js and custom logic -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <script>
         // Global variables for the Three.js scene and application state
         let scene, camera, renderer;
@@ -117,6 +128,7 @@
         let highlightLight; // New variable for the single, dynamic light
         let torchLight; // New variable for the mouse torch light
         let cursorVisible = false;
+        let cocoSsdModel = null;
         
         // Camera movement state
         let moveForward = false, moveBackward = false;
@@ -503,7 +515,11 @@
          * Builds the VR chat UI by clearing old models and creating new response windows.
          */
         function buildVRChatUI() {
-            if (selectedModels.length === 0) return;
+            if (selectedModels.length === 0 || selectedModels.length>3) {
+                document.getElementById('status').textContent = 'Select 1 to 3 models before building the UI';
+                return;
+            }
+            document.getElementById('videoSection').style.display = 'block';
             
             isBuilt = true;
             
@@ -521,7 +537,144 @@
             // Create response windows in 3D space
             createResponseWindows();
         }
-        
+
+        let videoMesh = null;
+        let videoMeshCtxt = null;
+
+        function mapVideoTextureWhenVideoLoaded(windowMesh, model, canvas, context, textureOriginal) {
+            const video = document.getElementById("video");
+            document.getElementById("videoUpload").addEventListener("change", async (event) => {
+                if(!cocoSsdModel) {
+                    cocoSsd.load().then(model => {
+                    cocoSsdModel = model;
+                    document.getElementById('inferChk').disabled = false;
+                    document.getElementById('inferChk').addEventListener('change', (e) => {
+                    if(e.target.checked) {
+                        video.pause();
+                        runInferenceOnCurrentFrame(windowMesh);
+                    } else {
+                        video.play();
+                    }});
+                    console.log("cocoSsdModel",cocoSsdModel);
+                    });
+                }
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append("video", file);
+
+                const res = await fetch("/api/upload", { method: "POST", body: formData });
+                const data = await res.json();
+                video.src = data.videoUrl;
+                await video.play();
+
+                const texture = new THREE.VideoTexture(video);
+                windowMesh.material.map = texture;
+                windowMesh.material.needsUpdate = true;
+                videoMesh = windowMesh;
+                videoMeshCtxt = { model, canvas, context, texture: textureOriginal };
+            });
+        }
+
+            async function runInferenceOnCurrentFrame(windowMesh) {
+                try {
+                    // Create temporary canvas for the current frame
+                    const inferenceCanvas = document.createElement('canvas');
+                    const inferenceCtx = inferenceCanvas.getContext('2d');
+                    inferenceCanvas.width = video.videoWidth;
+                    inferenceCanvas.height = video.videoHeight;
+
+                    // Draw the current paused video frame
+                    inferenceCtx.drawImage(video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
+
+                    // Run COCO-SSD inference on the current frame
+                    cocoSsdModel.detect(inferenceCanvas).then(predictions => {
+                        console.log("Predictions:", predictions);
+                        console.log("Frame inference complete. Detected:", predictions);
+                        overlayPredictions(predictions, windowMesh);
+                    });
+                } catch (error) {
+                    console.error("Inference error:", error);
+                }
+            }
+
+            function overlayPredictions(predictions, mesh) {
+                // Clear previous overlays first
+                //clearOverlays();
+
+                console.log("Detected objects:", predictions);
+
+                predictions.forEach(prediction => {
+                    const { bbox, class: className, score } = prediction;
+                    if (score > 0.5) { // Only show confident detections
+                        createBoundingBoxOverlay(bbox, className, score, mesh);
+                    }
+                });
+            }
+
+
+            function createBoundingBoxOverlay(bbox, className, score, mesh) {
+                // Create 3D bounding box or 2D overlay on the video texture
+                // Convert 2D bbox coordinates to 3D space relative to the mesh
+                const [x, y, width, height] = bbox;
+
+                // Use PlaneGeometry for a flat rectangle
+                const geometry = new THREE.PlaneGeometry(width / 100, height / 100);
+
+                // Extract only the outline (edges)
+                const edges = new THREE.EdgesGeometry(geometry);
+                const material = new THREE.LineBasicMaterial({ color: 0x00ff00, linewidth: 2 });
+                const boxMesh = new THREE.LineSegments(edges, material);
+
+                // Position correctly
+                boxMesh.position.set(
+                    (x + width / 2 - video.videoWidth / 2) / 100,
+                    (-y - height / 2 + video.videoHeight / 2) / 100,
+                    0.1
+                );
+
+                mesh.add(boxMesh);
+
+                const labelText = `${className} ${(score * 100).toFixed(1)}%`;
+                const label = makeTextSprite(labelText, { fontsize: 30, borderThickness: 2 });
+                label.position.set(
+                    (x + width / 2 - video.videoWidth / 2) / 100,
+                    (-y - height / 2 + video.videoHeight / 2) / 100, // 👈 a bit above the box
+                    0.1
+                );
+
+                mesh.add(label);
+            }
+
+            function makeTextSprite(message, parameters) {
+                const fontface = parameters?.fontface || "Arial";
+                const fontsize = parameters?.fontsize || 20;
+                const borderThickness = parameters?.borderThickness || 2;
+
+                const canvas = document.createElement("canvas");
+                const context = canvas.getContext("2d");
+                context.font = fontsize + "px " + fontface;
+
+                // Draw background (semi-transparent)
+                /*context.fillStyle = "rgba(0, 0, 0, 0.5)";
+                context.fillRect(0, 0, canvas.width, canvas.height);*/
+
+                // Draw text
+                context.fillStyle = "rgba(0, 255, 0, 1.0)";
+                context.textAlign = "left";
+                context.textBaseline = "middle";
+                context.fillText(message, borderThickness * 2, canvas.height / 2);
+
+                // Convert to texture
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, alphaTest: 0.01 });
+                const sprite = new THREE.Sprite(spriteMaterial);
+
+                // Default reasonable scale
+                sprite.scale.set(2, 2, 2);
+                return sprite;
+            }
         /**
          * Creates the 3D chat windows for each selected AI model.
          */
@@ -559,6 +712,10 @@
                 const texture = new THREE.CanvasTexture(canvas);
                 windowMesh.material.map = texture;
                 windowMesh.userData = { model, canvas, context, texture };
+
+                if (index === 0) {
+                    mapVideoTextureWhenVideoLoaded(windowMesh, model, canvas, context, texture);
+                }
                 
                 scene.add(group);
                 responseWindows.push(windowMesh);
@@ -584,6 +741,20 @@
             responseWindows.forEach(window => {
                 updateResponseWindow(window, prompt, 'Processing...');
             });
+
+            if(videoMesh) {
+                const video = document.getElementById("video");
+                await video.pause();
+                videoMesh.material = new THREE.MeshPhongMaterial({ 
+                    color: 0x2c3e50,
+                    transparent: true,
+                    opacity: 0.9,
+                    side: THREE.DoubleSide
+                });
+                videoMesh.material.map = videoMeshCtxt.texture;
+                videoMesh.userData = videoMeshCtxt;
+                videoMesh = null;
+            }
 
             // Use Promise.all to handle all API calls concurrently
             const promises = selectedModels.map(model => {
@@ -719,8 +890,8 @@
             
             // Rotate the initial model cubes slightly
             modelGroups.forEach(group => {
-                group.rotation.y += (direction) * 0.002;
-                group.rotation.x += (direction) * 0.002;
+                group.rotation.y += (direction) * 0.001;
+                group.rotation.x += (direction) * 0.001;
             });
             
             // Make response windows always face the camera
