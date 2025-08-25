@@ -86,7 +86,8 @@ exports.addMissingPermissionFromError = async (errorMessage) => {
                     //return policyArn;
                 }
             }
-            throw error;
+            //throw error;
+            return `Error adding permission: ${error.message}`;
         }
 
     } catch (error) {
